@@ -40,10 +40,11 @@ namespace MiniRover.Car
                 if (wifi.InSetupMode && car.Matrix != null) car.Matrix.Show(Eyes.Setup);
             });
 
-            // BLE setup: always in setup mode; after a BLE-provisioned reboot, for a short window so the app can
-            // reconnect and confirm the car joined the network. Never while driving.
+            // BLE setup: always in setup mode; otherwise for a short window after every boot, so the app can
+            // confirm the car joined the network after setup, and so another device can pair (switch the car off
+            // and on, then "Add a car"). Pairing still needs the code shown on the eyes. Never while driving.
             var ble = new BleSetupService(car, wifi, settings, wifi.SetupSsid);
-            bool announce = !wifi.InSetupMode && settings.AnnounceAfterSetup;
+            bool announce = !wifi.InSetupMode;
             if (wifi.InSetupMode || announce)
             {
                 Step(car, "ble", ble.Start);
@@ -52,8 +53,6 @@ namespace MiniRover.Car
             {
                 Step(car, "ble window", () =>
                 {
-                    settings.AnnounceAfterSetup = false;
-                    settings.Save();
                     new Thread(() =>
                     {
                         Thread.Sleep(Protocol.BleSetup.ConnectedAdvertiseSeconds * 1000);
@@ -63,8 +62,16 @@ namespace MiniRover.Car
                 });
             }
 
+            // The app's WebRTC link: only on a real network (setup mode has no internet and no pairing yet).
+            RtcLinkService link = null;
+            if (wifi.Connected)
+            {
+                link = new RtcLinkService(car, settings, wifi.SetupSsid);
+                Step(car, "link", link.Start);
+            }
+
             var http = new HttpServer(80, null);
-            var api = new WebApi(car, wifi, http);
+            var api = new WebApi(car, wifi, http) { Link = link };
             http.Handle = api.Handle;
             http.Start();
 

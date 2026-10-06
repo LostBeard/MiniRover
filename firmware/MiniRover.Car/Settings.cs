@@ -41,7 +41,6 @@ namespace MiniRover.Car
 
         /// <summary>Set when WiFi was just provisioned over BLE: on the next boot the car keeps advertising for a
         /// while so the app can confirm it joined.</summary>
-        public bool AnnounceAfterSetup { get => GetDouble("ble.announce", 0) != 0; set => Set("ble.announce", value ? 1 : 0); }
 
         /// <summary>Why the last WiFi connection attempt failed (shown to the app in setup mode).</summary>
         public string LastWifiError { get => GetString("wifi.error", ""); set => SetString("wifi.error", value); }

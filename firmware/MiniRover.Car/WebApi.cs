@@ -17,6 +17,9 @@ namespace MiniRover.Car
         readonly WifiService _wifi;
         readonly HttpServer _http;
 
+        /// <summary>The app link (null in setup mode).</summary>
+        public RtcLinkService Link;
+
         public WebApi(Car car, WifiService wifi, HttpServer http)
         {
             _car = car;
@@ -182,7 +185,12 @@ namespace MiniRover.Car
             sb.Append(",\"managedBytesInUse\":").Append(System.GC.GetTotalMemory(false).ToString());
             string faults = _car.Faults;
             if (_http.StartError.Length > 0) faults += (faults.Length > 0 ? "; " : "") + _http.StartError;
-            sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
+sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
+            if (Link != null)
+            {
+                sb.Append(",\"link\":{\"status\":\"").Append(JsonEscape(Link.Status)).Append("\",\"authenticated\":").Append(B(Link.Authenticated))
+                  .Append(",\"sessions\":").Append(Link.Sessions.ToString()).Append('}');
+            }
 
             BatteryService b = _car.Battery;
             if (b != null)

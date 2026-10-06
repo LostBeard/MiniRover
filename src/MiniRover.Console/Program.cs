@@ -4,6 +4,9 @@ using MiniRover.ConsoleApp;
 // minirover setup [--name <prefix>] [--code <4 digits> | --code-from-debug <COMx>] [--scan] [--pairing] [--wifi <ssid> <password>]
 // With no --code options the code shown on the car's LED eyes is asked for on the console.
 
+// minirover link [--car name] [--key hex] ["drive 40 40 1000; servo 90 120; ..."]   (see LinkCommand.cs)
+if (args.Length >= 1 && args[0] == "link") return await LinkCommand.RunAsync(args);
+
 // minirover webtest <publish wwwroot> <COMx> [httpPort] [cdpPort] [screenshotDir]
 if (args.Length >= 3 && args[0] == "webtest")
 {
@@ -146,7 +149,8 @@ if (scan || pairing || ssid != null)
     if (pairing)
     {
         var (key, name) = await client.GetPairingAsync();
-        Console.WriteLine($"pairing: name={name} roomKey={Convert.ToHexString(key).ToLowerInvariant()}");
+        Console.WriteLine($"pairing: name={name}");
+        CarKeys.Save(name, key);
     }
     if (ssid != null)
     {

@@ -62,40 +62,47 @@ tests/
 - [x] GitHub repository + first push (github.com/LostBeard/MiniRover)
 
 ### Phase 0b - Shared nanoFramework WebRTC library
-- [ ] New repo `SpawnDev.nanoFramework.WebRTC`, contents moved from SpawnWear:
-  - managed `PeerConnection` wrapper (libpeer) and `Ed25519`/`X25519` (Monocypher), with their native C++
-  - tracker signaling + WebSocket client, generalized (peer id, room, ICE servers configurable)
-- [ ] TLS server certificate verified against a bundled root CA (SpawnWear currently skips verification)
-- [ ] Per-message size limits configurable and PSRAM-backed (SpawnWear: 512 B TX / 1 KB RX; JPEG frames need tens of KB)
-- [ ] SpawnWear rebuilt and verified on the shared library
+- [x] New public repo `SpawnDev.nanoFramework.WebRTC` (github.com/LostBeard/SpawnDev.nanoFramework.WebRTC), a submodule at `firmware/external/`: `PeerConnection` (libpeer interop), WebSocket client, tracker signaling, configurable peer id / room / ICE servers
+- [x] TLS server certificate verified against a bundled root CA (ISRG Root X1)
+- [x] PSRAM-backed rings: 64 KB TX ring, 16 x 2 KB RX, 96 KB "latest frame wins" video slot fed from native code
+- [x] libpeer fork fixes: DCEP channel type, per-channel stream ids, SCTP receive rewrite (reassembly, SACK with gaps, 64 KB window)
+- [x] Native slots freed on a CLR soft reboot (a deploy left the old program's connection holding ~190 KB; measured)
+- [x] `DataChannel.Open` waits for SCTP: ICE "completed" comes before the SCTP association (six sessions in a row failed on the car)
+- [ ] Ed25519 / X25519 (Monocypher) moved from SpawnWear
+- [ ] Split the managed signaling code into its own assembly: ANY change to the interop assembly changes its checksum and forces a firmware rebuild (measured 0xBF64AE07 -> 0x846AB963 for one managed class)
+- [ ] SpawnWear rebuilt and verified on the shared library (Riker's call)
 
 ### Phase 1 - Car bring-up
 Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over the kit's CH340C (overruns at 921600 baud, see Docs/firmware-build.md), so Phase 1 runs on the MiniRover firmware target (460800 baud + CRC32), which pulls part of Phase 2 forward.
-- [x] Firmware target `MINIROVER_ESP32` builds (nanoCLR 0x1576a0, 26% of the app partition free); deploy works
+- [x] Firmware target `MINIROVER_ESP32` builds; deploy works
 - [x] Car app boots on the bare board: brownout guard (no servos on USB power), faults reported per part, WiFi setup access point up
 - [x] RMT receivers (sonar, IR) initialise (fixed a nanoFramework RMT bug for the base ESP32)
-- [ ] Board drivers on the shared I2C bus: PCA9685, PCF8574, HT16K33
-- [ ] **`servo center`** (both servos to 90 degrees) so the camera head can be mounted
-- [ ] Motors: per-motor direction, trim, skid steering mixer
-- [ ] WS2812 LEDs + GPIO32 battery sampling time-shared with them
-- [ ] Buzzer (tones, melodies), light sensors, line sensors, IR remote (NEC), ultrasonic
-- [ ] Settings persisted in flash (servo trim, motor trim, battery coefficient)
-- [ ] Serial console for every function; each verified on the real car
+- [x] Board drivers on the shared I2C bus: PCA9685, PCF8574, HT16K33
+- [x] `servo center`; camera head mounted; pan/tilt directions verified
+- [x] Motors: all four verified on the car (positions + direction; per-car `motorN.invert`)
+- [x] WS2812 LEDs + GPIO32 battery sampling time-shared with them (battery fit raw/4096 x 3.9 x 3.7)
+- [x] Buzzer, light sensor, line sensors, LED-matrix eyes verified on the car
+- [ ] IR remote (NEC) and ultrasonic verified on the car (need the remote / the sonar head)
+- [x] Settings persisted in flash (servo trim, motor invert/gain, battery coefficient, pairing key)
 
 ### Phase 2 - Custom firmware with WebRTC and camera
-- [ ] Firmware preset for the classic ESP32-WROVER: libpeer + srtp + esp32-camera + shared WebRTC interop + MiniRover.Camera; no Bluetooth
-- [ ] Partition table that fits in 4 MB flash (measure: firmware image size, free heap, free PSRAM)
-- [ ] DTLS handshake with Chrome and with the desktop client
-- [ ] libpeer: multiple data channels, unordered/no-retransmit channel, large messages (fix in libpeer if missing)
-- [ ] Native JPEG task; measure fps and latency vs resolution and quality for OV2640 and GC0308
+- [x] Firmware preset for the classic ESP32-WROVER: libpeer + shared WebRTC interop + NimBLE (BLE setup); IPv6, PSRAM lwIP
+- [x] Fits the 4 MB flash: nanoCLR 0x1a3c90, 10% of the app partition free (grow the partition if the camera does not fit)
+- [x] DTLS + SCTP + two data channels with the desktop client (SipSorcery via SpawnDev.RTC)
+- [ ] DTLS + data channels with Chrome (the browser app)
+- [ ] Native JPEG task (esp32-camera, OV2640 / GC0308 detect); measure fps and latency vs resolution and quality
+- [ ] Free internal heap is 29 KB with a session up during the boot BLE window (measured): watch it when the camera lands
 
 ### Phase 3 - Protocol and link
-- [ ] Shared protocol (drive intent, servo, lights, matrix, buzzer, modes, settings, telemetry, camera control)
-- [ ] Tracker signaling on the car, pairing link, Ed25519 challenge
-- [ ] First-boot access point + setup page (WiFi credentials, room key, pairing link)
-- [x] Deadman stop, measured on the real car over WiFi: 300 ms hold -> stopped within 345 ms of sending (incl. ~100 ms network), 1000 ms hold -> within 1036 ms; every stop counted by the watchdog
+- [x] Shared protocol `CarLink` (handshake, drive, servo, lights, buzzer, eyes, stop, telemetry), compiled into both runtimes; 37 tests
+- [x] Tracker signaling on the car (room id = HMAC of the pairing key), mutual HMAC challenge over "ctrl"
+- [x] BLE setup (code on the eyes, WiFi choice, pairing key); a 2-minute BLE window after every boot lets another device pair
+- [x] Measured on the real car through hub.spawndev.com: connect + authenticate in 6.6-6.7 s, telemetry 5 Hz, reconnect after a client leaves
+- [x] Deadman over WiFi: 300 ms hold -> stopped within 345 ms of sending, 1000 ms hold -> within 1036 ms (HTTP); over WebRTC one drive frame with 300 / 1000 ms hold -> telemetry reports stopped at 519 / 1236 ms (includes up to 200 ms telemetry period)
+- [x] `MiniRover.Console link` drives the real car (`MiniRover.Client.CarConnection`, shared with the browser app)
 - [ ] Disable WiFi power save (modem sleep) for driving: a status poll stalled 1.4 s on the car (measured), unacceptable for 30 Hz control
-- [ ] `MiniRover.Console` drives the real car; hardware-in-the-loop tests
+- [ ] The HTTP test API is unauthenticated on the LAN: gate it (pairing key) or make it opt-in before a release
+- [ ] Report upstream: nanoFramework `HMACSHA256(byte[] key)` keeps the caller's array and `Dispose()` zeroes it (wiped the car's pairing key; MiniRover uses `HashData`)
 
 ### Phase 4 - Browser app
 - [x] App scaffold: SpawnJSAppBuilder + RazorRenderer + RazorUI (dark theme), garage of paired cars (localStorage)

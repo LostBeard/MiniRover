@@ -304,7 +304,6 @@ namespace MiniRover.Car
                 return;
             }
             EnsureRoomKey(); // the app may have skipped GetPairing; the key must exist before it reconnects
-            _settings.AnnounceAfterSetup = true;
             _settings.LastWifiError = "";
             _settings.Save();
             Notify(new byte[] { BleSetup.EvWifiSaved });
