@@ -120,6 +120,7 @@
                 Reconnects = attempt - 1;
                 _video = _link.VideoChannel ?? _video;
                 _link.Video(true); // the car's saved size / quality / fps
+                ApplyTestHooks();
                 _sentPan = _sentTilt = -1; // resend the camera aim to a car that may have restarted
                 if (_lights) _link.Leds(255, 255, 255);
                 StateHasChanged();
@@ -150,6 +151,18 @@
             if (_cts.IsCancellationRequested) return;
             try { await Task.Delay(1000, _cts.Token); } catch (OperationCanceledException) { return; }
         }
+    }
+
+    /// <summary>
+    /// Test hook: <c>?testloss=50</c> in the page address asks the car to drop 50 per mille of the datagrams it sends
+    /// this session, to check that video and controls survive a lossy network (retransmission + FORWARD-TSN).
+    /// </summary>
+    void ApplyTestHooks()
+    {
+        string search;
+        try { search = JS.Get<string>("location.search") ?? ""; } catch { return; }
+        var m = System.Text.RegularExpressions.Regex.Match(search, @"[?&]testloss=(\d+)");
+        if (m.Success && _link != null) _link.Setting("test.loss=" + m.Groups[1].Value);
     }
 
     /// <summary>How many times this page reconnected (shown for tests).</summary>

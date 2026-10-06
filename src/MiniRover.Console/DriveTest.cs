@@ -15,7 +15,7 @@ namespace MiniRover.ConsoleApp;
 /// </summary>
 public static class DriveTest
 {
-    public static async Task<int> RunAsync(string webRoot, int httpPort, int cdpPort, string shotDir, string? rebootPort = null)
+    public static async Task<int> RunAsync(string webRoot, int httpPort, int cdpPort, string shotDir, string? rebootPort = null, int lossPermille = 0, string? carHttp = null)
     {
         if (!File.Exists(Path.Combine(webRoot, "index.html"))) throw new FileNotFoundException("publish the app first", Path.Combine(webRoot, "index.html"));
         var (name, keyHex) = CarKeys.Load().LastOrDefault();
@@ -47,7 +47,8 @@ public static class DriveTest
             var car = new JsonArray(new JsonObject { ["Name"] = name, ["RoomKeyHex"] = keyHex, ["LastIp"] = "", ["Firmware"] = "test", ["PairedUtc"] = DateTime.UtcNow.ToString("o") });
             string seed = $"if (location.origin === 'http://localhost:{httpPort}') localStorage.setItem('minirover.cars.v1', {JsonSerializer.Serialize(car.ToJsonString())});";
             await cdp.SendAsync("Page.addScriptToEvaluateOnNewDocument", new JsonObject { ["source"] = seed });
-            await cdp.SendAsync("Page.navigate", new JsonObject { ["url"] = $"http://localhost:{httpPort}/" });
+            await cdp.SendAsync("Page.navigate", new JsonObject { ["url"] = $"http://localhost:{httpPort}/" + (lossPermille > 0 ? $"?testloss={lossPermille}" : "") });
+            if (lossPermille > 0) Console.WriteLine($"loss test: the car drops {lossPermille / 10.0:F1}% of the datagrams it sends");
 
             await WaitForAsync(cdp, "[data-test=garage-drive]", TimeSpan.FromSeconds(60), "the garage with a Drive button");
             Console.WriteLine($"PASS garage lists {name}");
@@ -118,6 +119,19 @@ public static class DriveTest
                 await Task.Delay(5000);
                 int after = await WaitForIntAsync(cdp, "[data-test=drive-video]", "data-frames", v => v > before, "video frames after reconnect");
                 Console.WriteLine($"PASS reconnected {back} ms after the restart; video running again ({(after - before) / 5.0:F1} fps)");
+            }
+
+            if (carHttp != null)
+            {
+                // The car's own counters for this session (retransmissions, abandoned video chunks, FORWARD-TSN).
+                try
+                {
+                    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                    var link = JsonNode.Parse(await http.GetStringAsync(carHttp.TrimEnd('/') + "/status"))!["link"]!;
+                    Console.WriteLine($"  car link: retransmits {link["sctpRetransmits"]}, abandoned {link["sctpAbandoned"]}, FORWARD-TSN {link["sctpForwardTsn"]}, " +
+                                      $"peer supports FORWARD-TSN {link["peerForwardTsn"]}, test-dropped {link["testDropped"]}, unprotected {link["sctpUnprotected"]}");
+                }
+                catch (Exception ex) { Console.WriteLine("  car status not readable: " + ex.Message); }
             }
 
             await ClickAsync(cdp, "[data-test=btn-horn]");

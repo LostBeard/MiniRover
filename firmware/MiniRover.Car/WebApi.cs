@@ -222,6 +222,12 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
                   .Append(",\"telemetrySent\":").Append(Link.TelemetrySent.ToString())
                   .Append(",\"sendFailures\":").Append(Link.SendFailures.ToString())
                   .Append(",\"txQueuedBytes\":").Append(Link.TxQueuedBytes.ToString())
+                  .Append(",\"sctpRetransmits\":").Append(Link.Stat(SpawnDev.nanoFramework.WebRTC.PeerConnection.StatSctpRetransmits).ToString())
+                  .Append(",\"sctpAbandoned\":").Append(Link.Stat(SpawnDev.nanoFramework.WebRTC.PeerConnection.StatSctpAbandoned).ToString())
+                  .Append(",\"sctpForwardTsn\":").Append(Link.Stat(SpawnDev.nanoFramework.WebRTC.PeerConnection.StatSctpForwardTsn).ToString())
+                  .Append(",\"peerForwardTsn\":").Append(Link.Stat(SpawnDev.nanoFramework.WebRTC.PeerConnection.StatSctpPeerForwardTsn).ToString())
+                  .Append(",\"sctpUnprotected\":").Append(Link.Stat(SpawnDev.nanoFramework.WebRTC.PeerConnection.StatSctpUnprotected).ToString())
+                  .Append(",\"testDropped\":").Append(Link.Stat(SpawnDev.nanoFramework.WebRTC.PeerConnection.StatTestDropped).ToString())
                   .Append(",\"udpSendErrors\":").Append(SpawnDev.nanoFramework.WebRTC.PeerConnection.GetStat(-1, SpawnDev.nanoFramework.WebRTC.PeerConnection.StatUdpSendErrors).ToString())
                   .Append(",\"udpSendRetries\":").Append(SpawnDev.nanoFramework.WebRTC.PeerConnection.GetStat(-1, SpawnDev.nanoFramework.WebRTC.PeerConnection.StatUdpSendRetries).ToString())
                   .Append(",\"videoFramesDropped\":").Append(Link.VideoFramesDropped.ToString()).Append('}');

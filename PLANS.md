@@ -72,7 +72,7 @@ tests/
 - [ ] Ed25519 / X25519 (Monocypher) moved from SpawnWear
 - [ ] Split the managed signaling code into its own assembly: any new or changed METHOD in the interop assembly changes its checksum and forces a firmware rebuild (measured 0xBF64AE07 -> 0x846AB963 for one managed method; constants do not)
 - [x] libpeer send path: bounded retry when network buffers are full + send error/retry counters (StatUdpSendErrors/Retries)
-- [ ] libpeer SCTP never retransmits and never sends FORWARD-TSN: on a lossy network a lost video chunk leaves a permanent hole in the receiver's sequence. Measured loss on the LAN: 0 errors over 90 s; one early test lost 46% (cause not proven). Implement PR-SCTP (FORWARD-TSN) for video + retransmission for ctrl before driving over the internet
+- [x] libpeer SCTP: SACK processing, retransmission for reliable streams, FORWARD-TSN (RFC 3758) for video, HEARTBEAT-ACK. Measured from Chrome with injected loss: 5% -> controls intact, video 9 fps; 15% -> controls intact, video 5.3 fps; 0% -> no spurious retransmits (`drivetest --loss <permille>`)
 - [ ] SpawnWear rebuilt and verified on the shared library (Riker's call)
 
 ### Phase 1 - Car bring-up

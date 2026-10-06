@@ -25,14 +25,16 @@ if (args.Length >= 2 && args[0] == "monitor")
     return 0;
 }
 
-// minirover drivetest <publish wwwroot> [httpPort] [cdpPort] [screenshotDir] [--reboot COMx]   (THE WHEELS MUST BE OFF THE GROUND)
+// minirover drivetest <publish wwwroot> [httpPort] [cdpPort] [screenshotDir] [--reboot COMx] [--loss permille] [--car http://ip]   (THE WHEELS MUST BE OFF THE GROUND)
 if (args.Length >= 2 && args[0] == "drivetest")
 {
     return await DriveTest.RunAsync(args[1],
         args.Length > 2 ? int.Parse(args[2]) : 8641,
         args.Length > 3 ? int.Parse(args[3]) : 9241,
         args.Length > 4 && !args[4].StartsWith("--") ? args[4] : Path.Combine(Path.GetTempPath(), "minirover-drivetest-shots"),
-        args.SkipWhile(a => a != "--reboot").Skip(1).FirstOrDefault());
+        args.SkipWhile(a => a != "--reboot").Skip(1).FirstOrDefault(),
+        int.TryParse(args.SkipWhile(a => a != "--loss").Skip(1).FirstOrDefault(), out int lossArg) ? lossArg : 0,
+        args.SkipWhile(a => a != "--car").Skip(1).FirstOrDefault());
 }
 
 // minirover webtest <publish wwwroot> <COMx> [httpPort] [cdpPort] [screenshotDir]

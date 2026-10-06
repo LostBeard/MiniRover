@@ -52,6 +52,8 @@ namespace MiniRover.Car
         public int VideoStreamId => Authenticated ? _videoSid : -1;
 
         /// <summary>Camera frames the link skipped because the previous one was still being sent (latest wins).</summary>
+        public int Stat(int id) => _handle >= 0 ? PeerConnection.GetStat(_handle, id) : 0;
+
         public int TxQueuedBytes => _handle >= 0 ? PeerConnection.GetStat(_handle, PeerConnection.StatTxQueuedBytes) : 0;
 
         public int VideoFramesDropped => _handle >= 0 ? PeerConnection.GetStat(_handle, PeerConnection.StatFramesDropped) : 0;
@@ -261,6 +263,16 @@ namespace MiniRover.Car
                 case CarLink.MsgSetting:
                     {
                         string kv = Encoding.UTF8.GetString(_rx, o + 1, len - 1);
+                        if (kv.StartsWith("test.loss="))
+                        {
+                            // Link test hook (not a saved setting): drop this share (per mille) of outgoing datagrams to
+                            // prove retransmission / FORWARD-TSN. Only over the authenticated link, this session only.
+                            int permille = 0;
+                            try { permille = int.Parse(kv.Substring(10)); } catch { }
+                            PeerConnection.SetTestLoss(_handle, permille);
+                            Send(CarLink.EncodeText("test loss " + permille + " per mille"));
+                            break;
+                        }
                         bool ok = _car.Settings.TryApply(kv);
                         if (ok)
                         {
