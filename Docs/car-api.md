@@ -30,7 +30,7 @@ Then:
 | `/servo` | `pan`, `tilt` (degrees, 90 = center), `relax=1` |
 | `/servo/center` | |
 | `/leds` | `r`, `g`, `b` (0..255), optional `i` (one LED, 0..11), `brightness` |
-| `/matrix` | eye patterns |
+| `/matrix` | `eyes` = `alive` (default: blinks, follows the steering), `open`, `happy`, `heart`, `sad`, `angry`, `surprised`, `sleepy`; or `text` (scrolls, `passes`, default 1, 0 = keep going); or `hex` (32 hex digits, one raw frame); `brightness` 0..15 |
 | `/buzzer` | `hz`, `ms` (max 2000) |
 | `/sonar` | distance (ultrasonic head only) |
 | `/settings` | any of the keys below, e.g. `/settings?camera.fps=10` |

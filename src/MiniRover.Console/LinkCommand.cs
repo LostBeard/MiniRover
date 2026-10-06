@@ -196,6 +196,10 @@ static class LinkCommand
                     break;
                 }
                 case "lights": link.Lights(int.Parse(p[1]), 40, 40, 40, p.Length > 2 ? int.Parse(p[2]) : 0); break;
+                // face alive | face mood <n> | face text <passes> <words...>
+                case "face" when p.Length > 1 && p[1] == "alive": link.Face(CarLink.FaceAlive); break;
+                case "face" when p.Length > 2 && p[1] == "mood": link.Face(CarLink.FaceMood, int.Parse(p[2])); break;
+                case "face" when p.Length > 3 && p[1] == "text": link.Face(CarLink.FaceText, int.Parse(p[2]), string.Join(' ', p[3..])); break;
                 case "videoon": link.Video(true); break;
                 case "videooff": link.Video(false); break;
                 case "stop": link.Stop(); break;

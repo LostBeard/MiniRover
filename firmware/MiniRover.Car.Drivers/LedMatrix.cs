@@ -68,6 +68,29 @@ namespace MiniRover.Car.Drivers
             }
         }
 
+        /// <summary>Reads the chip's display RAM back as a 16-byte frame (the inverse of <see cref="Show"/>): proves
+        /// what the eyes really show, for tests and /status.</summary>
+        public byte[] ReadFrame()
+        {
+            var ram = new byte[FrameBytes];
+            lock (_ram)
+            {
+                // Set the RAM address pointer, then read: the shared-bus helpers keep other devices off the bus.
+                SharedI2c.Write(_device, new byte[] { 0x00 });
+                SharedI2c.Read(_device, ram);
+            }
+            var frame = new byte[FrameBytes];
+            for (int k = 0; k < 8; k++)
+            {
+                int word = ram[2 * k] | (ram[2 * k + 1] << 8);
+                for (int row = 0; row < FrameBytes; row++)
+                {
+                    if ((word & (1 << row)) != 0) frame[row] |= (byte)(1 << (7 - k));
+                }
+            }
+            return frame;
+        }
+
         public void Dispose()
         {
             try { Clear(); } catch { /* bus gone at shutdown */ }

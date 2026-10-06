@@ -134,7 +134,7 @@ public static class WebTest
 
     internal static Task ClickAsync(Cdp cdp, string selector) => EvalAsync(cdp, Deep(selector) + ".click(), true", userGesture: true);
 
-    static Task TypeAsync(Cdp cdp, string selector, string text) =>
+    internal static Task TypeAsync(Cdp cdp, string selector, string text) =>
         EvalAsync(cdp, "(()=>{const e=" + Deep(selector) + ";e.focus();e.value=" + JsonSerializer.Serialize(text) + ";e.dispatchEvent(new Event('input',{bubbles:true}));return true;})()");
 
     internal static async Task<T> WithTimeout<T>(Task<T> task, TimeSpan timeout, string what)

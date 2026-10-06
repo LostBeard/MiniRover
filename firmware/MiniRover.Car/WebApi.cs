@@ -2,6 +2,7 @@ using System;
 using System.Net.Sockets;
 using System.Text;
 using MiniRover.Car.Drivers;
+using MiniRover.Protocol;
 using nanoFramework.Runtime.Native;
 
 namespace MiniRover.Car
@@ -104,10 +105,17 @@ namespace MiniRover.Car
                     Ok(c);
                     return;
                 case "/matrix":
-                    Need(_car.Matrix, "matrix");
+                    Need(_car.Face, "matrix");
                     if (r.Get("brightness") != null) _car.Matrix.SetBrightness((int)r.GetDouble("brightness", 8));
                     string hex = r.Get("hex");
-                    _car.Matrix.Show(hex != null ? ParseHex(hex) : EyesByName(r.Get("eyes", "open")));
+                    string text = r.Get("text");
+                    if (hex != null) _car.Face.ShowCustom(ParseHex(hex));
+                    else if (text != null) _car.Face.Set(CarLink.FaceText, (int)r.GetDouble("passes", 1), text);
+                    else
+                    {
+                        int mood = MoodByName(r.Get("eyes", "alive"));
+                        _car.Face.Set(mood < 0 ? CarLink.FaceAlive : CarLink.FaceMood, mood, null);
+                    }
                     Ok(c);
                     return;
                 case "/buzzer":
@@ -269,6 +277,20 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
             }
             Settings s = _car.Settings;
             if (_car.Lights != null) sb.Append(",\"lights\":{\"mode\":").Append(_car.Lights.Mode.ToString()).Append('}');
+            if (_car.Face != null)
+            {
+                // "shown" is read back from the matrix chip: what the eyes really show, not what was asked for.
+                string shown;
+                try
+                {
+                    byte[] f = _car.Matrix.ReadFrame();
+                    var hx = new StringBuilder(32);
+                    for (int i = 0; i < f.Length; i++) hx.Append(f[i].ToString("x2"));
+                    shown = hx.ToString();
+                }
+                catch (Exception ex) { shown = "error: " + ex.Message; }
+                sb.Append(",\"face\":{\"mode\":").Append(_car.Face.Mode.ToString()).Append(",\"shown\":\"").Append(shown).Append("\"}");
+            }
             sb.Append(",\"bootVolts\":").Append(_car.BootVolts.ToString("F2"));
             sb.Append(",\"resetReason\":\"").Append(Program.ResetReasonName(MiniRover.Native.Board.ResetReason())).Append('"');
             sb.Append(",\"lastAbnormalReset\":\"").Append(JsonEscape(_car.Settings.LastAbnormalReset)).Append('"');
@@ -313,15 +335,19 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
             if (part == null) throw new InvalidOperationException(name + " not available (see /status faults)");
         }
 
-        static byte[] EyesByName(string name)
+        /// <summary>An EyeArt mood by name, or -1 for "alive" (and anything unknown).</summary>
+        static int MoodByName(string name)
         {
             switch (name)
             {
-                case "closed": return Eyes.Closed;
-                case "happy": return Eyes.Happy;
-                case "setup": return Eyes.Setup;
-                case "dead": return Eyes.Dead;
-                default: return Eyes.Open;
+                case "open": return EyeArt.MoodOpen;
+                case "happy": return EyeArt.MoodHappy;
+                case "heart": return EyeArt.MoodHeart;
+                case "sad": return EyeArt.MoodSad;
+                case "angry": return EyeArt.MoodAngry;
+                case "surprised": return EyeArt.MoodSurprised;
+                case "sleepy": return EyeArt.MoodSleepy;
+                default: return -1;
             }
         }
 

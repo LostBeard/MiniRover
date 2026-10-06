@@ -1,0 +1,21 @@
+@using MiniRover.Protocol
+
+@* A small picture of the car's two 8x8 LED eyes, drawn from a 16-byte frame (layout in EyeArt). *@
+<span class="mr-eye-preview" aria-hidden="true">
+    @for (int m = 0; m < 2; m++)
+    {
+        <span class="mr-eye-grid">
+            @for (int r = 0; r < 8; r++)
+            {
+                for (int c = 0; c < 8; c++)
+                {
+                    <i class="@(EyeArt.GetPixel(Frame, m * 8 + c, r) ? "on" : null)"></i>
+                }
+            }
+        </span>
+    }
+</span>
+
+@code {
+    [Parameter, EditorRequired] public byte[] Frame { get; set; } = new byte[EyeArt.FrameBytes];
+}

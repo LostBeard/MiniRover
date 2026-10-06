@@ -132,7 +132,7 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [ ] Gamepad (standard mapping, triggers + sticks, A/B/Y): written, not yet tried with a real pad; rumble
 - [x] Lights toggle, horn
 - [x] Light patterns animated on the car (LightsService): dim, headlights (+ brake lights and turn signals once calibrated), hazard, police, rainbow, battery gauge, off; app button cycles them, verified on the car via /status. Light corner calibration in Settings (groups or single LEDs), verified stored on the car; the real corner layout still has to be done by someone looking at the car
-- [ ] LED-matrix eyes: animations (look where the car steers, blink) and scrolling text
+- [x] LED-matrix eyes animated on the car (FaceService): alive (blinks, looks where the car steers, looks down reversing, glances around when idle), 6 moods, scrolling text in MiniRover's own 3x5 font (`*` = heart); pairing code / setup / flat battery override. Shared EyeArt (protocol project) draws them on the car and previews them in the app's Eyes panel. Verified on the car by reading the matrix chip's RAM back (/status face.shown) for every mode and steering direction, and from Chrome (drivetest)
 - [ ] Sensors page with live charts
 - [x] Battery: Li-ion curve (%), time remaining from the idle-reading trend (unit-tested), low / empty / switch-off banners (banners not yet seen with a real low pack)
 - [x] Settings panel on the drive page (live link): top speed, steering sensitivity + stick curve (per car), camera size/quality/fps/orientation, camera aim (pan/tilt trim, camera held centered), per-wheel test / reversed / balance, battery calibration from a multimeter reading, LED brightness, HTTP test API, signaling server. Verified from Chrome: values match the car, wheel test spins a wheel, a change is stored
@@ -142,7 +142,7 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 
 ### Phase 5 - Hosting and releases
 - [ ] `MiniRover.Server` (LAN / offline)
-- [ ] GitHub Pages deployment of the browser app
+- [x] GitHub Pages deployment of the browser app (https://lostbeard.github.io/MiniRover/, verified driving the car)
 - [ ] Firmware images as GitHub Release assets + flashing guide
 
 ### Phase 6 - Machine-learning modes

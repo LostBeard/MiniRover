@@ -311,11 +311,17 @@ namespace MiniRover.Car
                     }
                     break;
                 case CarLink.MsgEyes:
-                    if (len >= 17 && _car.Matrix != null)
+                    if (len >= 17 && _car.Face != null)
                     {
                         byte[] eyes = new byte[16];
                         Array.Copy(_rx, o + 1, eyes, 0, 16);
-                        _car.Matrix.Show(eyes);
+                        _car.Face.ShowCustom(eyes);
+                    }
+                    break;
+                case CarLink.MsgFace:
+                    if (_car.Face != null && CarLink.TryDecodeFace(_rx, o, len, out int faceMode, out int faceArg, out string faceText))
+                    {
+                        _car.Face.Set(faceMode, faceArg, faceText);
                     }
                     break;
             }

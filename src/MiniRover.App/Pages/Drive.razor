@@ -52,10 +52,15 @@
             <UiButton Secondary="@(_lightsIndex == 0)" OnClick="ToggleLights" data-test="btn-lights" data-mode="@LightModes[_lightsIndex].Mode">Lights: @LightModes[_lightsIndex].Name</UiButton>
             <UiButton Secondary="true" OnClick="CenterCamera" data-test="btn-center">Center camera</UiButton>
             <UiButton Secondary="true" OnClick="CycleSpeed" data-test="btn-speed">Speed: @SpeedName</UiButton>
+            <UiButton Secondary="@(!_showEyes)" OnClick="@(() => _showEyes = !_showEyes)" data-test="btn-eyes">Eyes</UiButton>
             <UiButton Secondary="@(!_showSettings)" OnClick="@(() => _showSettings = !_showSettings)" data-test="btn-settings">Settings</UiButton>
         </div>
         <Stick Label="Camera" TestId="stick-camera" SpringBack="false" OnMove="OnCameraStick" />
     </div>
+    @if (_showEyes && _link != null && _state == "connected")
+    {
+        <EyesPanel Link="_link" />
+    }
     @if (_showSettings && _link != null && _state == "connected")
     {
         <CarSettingsPanel Link="_link" Car="Car" Volts="@(_t == null ? null : _t.BatteryMillivolts / 1000.0)" OnLocalChanged="ApplyDrivingFeel" />
@@ -163,7 +168,7 @@
     string WifiClass => _t == null || WifiSignal.Bars(_t.Rssi) < 0 ? "mr-muted" : WifiSignal.Bars(_t.Rssi) switch { 0 => "mr-error", 1 => "mr-warn", _ => "mr-ok" };
     string LineText => _t == null ? "-" : $"{((_t.Line & 1) != 0 ? "#" : "_")}{((_t.Line & 2) != 0 ? "#" : "_")}{((_t.Line & 4) != 0 ? "#" : "_")}";
 
-    bool _showSettings;
+    bool _showSettings, _showEyes;
 
     /// <summary>Per-car steering sensitivity and stick curve (Settings page).</summary>
     void ApplyDrivingFeel()

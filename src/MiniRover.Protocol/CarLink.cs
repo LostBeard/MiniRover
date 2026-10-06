@@ -60,6 +60,7 @@ namespace MiniRover.Protocol
         public const byte MsgLights = 0x2B;     // [mode][r][g][b][param]: a light pattern, animated on the car (Lights* modes)
         public const byte MsgPing = 0x2A;       // [token u32]: the car answers MsgPong with the same token (link round trip)
         public const byte MsgMotorTest = 0x29;  // [motor u8 0..3][percent i8][holdMs u16]: one wheel (setup / calibration)
+        public const byte MsgFace = 0x2C;       // [mode][arg][ASCII text]: the eyes (Face* modes), animated on the car
 
         public const int TelemetryBytes = 22;
         public const int DriveBytes = 7;
@@ -215,6 +216,49 @@ namespace MiniRover.Protocol
         public static byte[] EncodeLights(int mode, byte r, byte g, byte b, int param)
         {
             return new byte[] { MsgLights, (byte)Clamp(mode, 0, 255), r, g, b, (byte)Clamp(param, 0, 255) };
+        }
+
+        // Eyes (MsgFace). The car's FaceService implements them; artwork and font are in EyeArt.
+        public const int FaceAlive = 0;   // blinks, looks where the car steers, glances around when idle
+        public const int FaceMood = 1;    // arg = EyeArt.Mood* (held until the next face message)
+        public const int FaceText = 2;    // arg = passes (0 = keep scrolling), then back to FaceAlive
+        public const int MaxFaceText = 48;
+
+        /// <summary>[MsgFace][mode][arg][text]: text is printable ASCII (anything else becomes '?'), at most
+        /// <see cref="MaxFaceText"/> characters.</summary>
+        public static byte[] EncodeFace(int mode, int arg, string text)
+        {
+            int n = text == null ? 0 : (text.Length > MaxFaceText ? MaxFaceText : text.Length);
+            byte[] b = new byte[3 + n];
+            b[0] = MsgFace;
+            b[1] = (byte)Clamp(mode, 0, 255);
+            b[2] = (byte)Clamp(arg, 0, 255);
+            for (int i = 0; i < n; i++)
+            {
+                char c = text[i];
+                b[3 + i] = (byte)(c < ' ' || c > '~' ? '?' : c);
+            }
+            return b;
+        }
+
+        public static bool TryDecodeFace(byte[] b, int offset, int length, out int mode, out int arg, out string text)
+        {
+            mode = 0;
+            arg = 0;
+            text = "";
+            if (b == null || offset < 0 || length < 3 || b.Length - offset < length) return false;
+            mode = b[offset + 1];
+            arg = b[offset + 2];
+            int n = length - 3;
+            if (n > MaxFaceText) n = MaxFaceText;
+            var chars = new char[n];
+            for (int i = 0; i < n; i++)
+            {
+                byte c = b[offset + 3 + i];
+                chars[i] = c < ' ' || c > '~' ? '?' : (char)c;
+            }
+            text = new string(chars);
+            return true;
         }
 
         public static byte[] EncodePing(uint token) => EncodeToken(MsgPing, token);

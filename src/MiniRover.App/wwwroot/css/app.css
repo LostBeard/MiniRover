@@ -83,3 +83,17 @@ html, body {
 .mr-wheel-name { font-weight: 600; }
 .mr-wheel-gain { grid-column: 1 / -1; margin: 0 !important; }
 .mr-corners { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 0.5rem 0; }
+
+/* Eyes panel: previews of the car's two 8x8 LED matrices */
+.mr-eyes { border: 1px solid var(--mr-border); border-radius: 8px; padding: 0.75rem 1rem; background: var(--mr-surface); display: grid; gap: 0.6rem; }
+.mr-eye-choices { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.mr-eye-choice { display: grid; justify-items: center; gap: 0.3rem; padding: 0.45rem 0.55rem; min-width: 4.5rem; background: var(--mr-bg); color: var(--mr-text); border: 1px solid var(--mr-border); border-radius: 8px; cursor: pointer; font: inherit; font-size: 0.85rem; }
+.mr-eye-choice:hover { border-color: var(--mr-muted); }
+.mr-eye-choice.active { border-color: var(--mr-accent); box-shadow: 0 0 0 1px var(--mr-accent) inset; }
+.mr-eye-preview { display: inline-flex; gap: 3px; vertical-align: middle; }
+.mr-eye-grid { display: grid; grid-template-columns: repeat(8, 4px); grid-auto-rows: 4px; gap: 1px; padding: 2px; background: #06080a; border-radius: 3px; }
+.mr-eye-grid i { display: block; border-radius: 1px; background: #1b2028; }
+.mr-eye-grid i.on { background: var(--mr-accent); box-shadow: 0 0 3px var(--mr-accent); }
+.mr-eye-text { display: flex; gap: 0.5rem; align-items: center; }
+.mr-eye-text > :first-child { flex: 1; min-width: 0; }
+.mr-eye-start { display: flex; align-items: center; gap: 0.5rem; margin: 0; }

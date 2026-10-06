@@ -124,8 +124,17 @@ public static class DriveTest
                 using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
                 for (int press = 0; press < 7; press++)
                 {
+                    string before = (await EvalAsync(cdp, Deep("[data-test=btn-lights]") + ".getAttribute('data-mode')")).GetValue<string>();
                     await ClickAsync(cdp, "[data-test=btn-lights]");
-                    string want = (await EvalAsync(cdp, Deep("[data-test=btn-lights]") + ".getAttribute('data-mode')")).GetValue<string>();
+                    // The button re-renders after the click is handled: read its new mode only once it has changed
+                    // (reading at once gave the old mode while the car already ran the new one).
+                    string want = before;
+                    for (int i = 0; i < 30 && want == before; i++)
+                    {
+                        await Task.Delay(100);
+                        want = (await EvalAsync(cdp, Deep("[data-test=btn-lights]") + ".getAttribute('data-mode')")).GetValue<string>();
+                    }
+                    if (want == before) throw new Exception($"FAIL lights: the button still shows mode {before} 3 s after a click");
                     string got = "";
                     for (int i = 0; i < 15 && got != want; i++)
                     {
@@ -135,6 +144,38 @@ public static class DriveTest
                     if (got != want) throw new Exception($"FAIL lights: the app selected mode {want}, the car runs {got}");
                 }
                 Console.WriteLine("PASS lights: all 7 patterns selected on the car in turn");
+
+                // Eyes: a mood button and a text message, checked against what the matrix chip really holds
+                // (/status reads its display RAM back), not just what the car was told.
+                async Task<string> Shown() => JsonNode.Parse(await http.GetStringAsync(carHttp.TrimEnd('/') + "/status"))!["face"]!["shown"]!.ToString();
+                await ClickAsync(cdp, "[data-test=btn-eyes]");
+                await WaitForAsync(cdp, "[data-test=eyes-love]", TimeSpan.FromSeconds(5), "the eyes panel");
+                await ClickAsync(cdp, "[data-test=eyes-love]");
+                string heart = Convert.ToHexString(MiniRover.Protocol.EyeArt.Mood(MiniRover.Protocol.EyeArt.MoodHeart)).ToLowerInvariant();
+                string shown = "";
+                for (int i = 0; i < 15 && shown != heart; i++) { await Task.Delay(300); shown = await Shown(); }
+                if (shown != heart)
+                {
+                    string mode = JsonNode.Parse(await http.GetStringAsync(carHttp.TrimEnd('/') + "/status"))!["face"]!["mode"]!.ToString();
+                    string pressed = (await EvalAsync(cdp, Deep("[data-test=eyes-love]") + ".getAttribute('aria-pressed')")).ToString();
+                    throw new Exception($"FAIL eyes: picked love, the matrix shows {shown} (car face mode {mode}, button pressed {pressed})");
+                }
+                await TypeAsync(cdp, "[data-test=eyes-text]", "HI");
+                await ClickAsync(cdp, "[data-test=eyes-send]");
+                // "HI" scrolls in from the right: some frame of the pass must match the renderer exactly.
+                var pass = new HashSet<string>();
+                for (int off = -MiniRover.Protocol.EyeArt.Columns; off < MiniRover.Protocol.EyeArt.TextColumns("HI"); off++)
+                {
+                    pass.Add(Convert.ToHexString(MiniRover.Protocol.EyeArt.Text("HI", off)).ToLowerInvariant());
+                }
+                pass.Remove(new string('0', 32)); // blank frames at the ends prove nothing
+                bool sawText = false;
+                for (int i = 0; i < 30 && !sawText; i++) { await Task.Delay(150); sawText = pass.Contains(await Shown()); }
+                if (!sawText) throw new Exception("FAIL eyes: sent \"HI\", the matrix never showed a frame of it");
+                await cdp.ScreenshotAsync(Path.Combine(shotDir, "drive-3-eyes.png"));
+                await ClickAsync(cdp, "[data-test=eyes-normal]");
+                await ClickAsync(cdp, "[data-test=btn-eyes]");
+                Console.WriteLine("PASS eyes: the love button and a text message reached the matrix (read back from the chip)");
             }
 
             // Settings: the panel loads the car's values, a wheel test spins a wheel, a change is stored by the car.

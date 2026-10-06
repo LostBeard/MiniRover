@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using MiniRover.Protocol;
 
 namespace MiniRover.Car
 {
@@ -46,7 +47,12 @@ namespace MiniRover.Car
             // real car) and leaves a half-started car. A failed step becomes a reported fault instead.
             Step(car, "greeting", () =>
             {
-                if (car.Matrix != null) car.Matrix.Show(car.HasBattery ? Eyes.Open : Eyes.Closed);
+                if (car.Face != null)
+                {
+                    // Closed eyes on USB power alone: the car cannot drive.
+                    if (!car.HasBattery) car.Face.SetSystem(EyeArt.Closed());
+                    car.Face.Start();
+                }
                 if (car.Lights != null)
                 {
                     // Dim white so a powered car is obvious. Off on USB power alone (brownout).
@@ -64,7 +70,7 @@ namespace MiniRover.Car
             Step(car, "wifi", () =>
             {
                 wifi.Start();
-                if (wifi.InSetupMode && car.Matrix != null) car.Matrix.Show(Eyes.Setup);
+                if (wifi.InSetupMode && car.Face != null) car.Face.SetSystem(EyeArt.Setup());
             });
 
             // BLE setup: always in setup mode; otherwise for a short window after every boot, so the app can
@@ -106,17 +112,19 @@ namespace MiniRover.Car
             http.Handle = api.Handle;
             http.Start();
 
-            // Show critical battery on the eyes; everything else runs on its own threads.
-            BatteryLevel shown = BatteryLevel.Ok;
+            // The eyes' system picture: setup target, X eyes on a flat battery, closed on USB power alone, otherwise
+            // the app's choice. Everything else runs on its own threads.
+            int shown = -1;
             while (true)
             {
                 Thread.Sleep(1000);
-                if (car.Battery != null && car.Matrix != null && !wifi.InSetupMode && car.Battery.Level != shown)
-                {
-                    shown = car.Battery.Level;
-                    try { car.Matrix.Show(shown == BatteryLevel.Critical ? Eyes.Dead : Eyes.Open); }
-                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Matrix: " + ex.Message); }
-                }
+                if (car.Face == null) continue;
+                int state = wifi.InSetupMode ? 1
+                    : (car.Battery != null && car.Battery.Level == BatteryLevel.Critical) ? 2
+                    : !car.HasBattery ? 3 : 0;
+                if (state == shown) continue;
+                shown = state;
+                car.Face.SetSystem(state == 1 ? EyeArt.Setup() : state == 2 ? EyeArt.Dead() : state == 3 ? EyeArt.Closed() : null);
             }
         }
 

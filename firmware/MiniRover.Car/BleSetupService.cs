@@ -172,7 +172,8 @@ namespace MiniRover.Car
             }
             // Also on the debug console: a developer without the camera head fitted can still pair.
             System.Diagnostics.Debug.WriteLine("BLE setup code: " + _code);
-            if (_car.Matrix != null) _car.Matrix.Show(Digits.Render(_code));
+            // Two digits per eye, the same as EyeArt.Text draws them.
+            if (_car.Face != null) _car.Face.SetOverlay(EyeArt.Text(_code, 0));
             if (_car.Buzzer != null) _car.Buzzer.Beep(2000, 60);
             Notify(new byte[] { BleSetup.EvCodeShown });
         }
@@ -419,7 +420,7 @@ namespace MiniRover.Car
         {
             try
             {
-                if (_car.Matrix != null) _car.Matrix.Show(_wifi.InSetupMode ? Eyes.Setup : Eyes.Open);
+                if (_car.Face != null) _car.Face.SetOverlay(null); // setup mode keeps its own picture underneath
             }
             catch (Exception ex)
             {

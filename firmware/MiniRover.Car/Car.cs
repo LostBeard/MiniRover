@@ -115,11 +115,16 @@ namespace MiniRover.Car
                 }
             }
             if (Leds != null) Lights = new LightsService(this); // started by Program after the greeting
+            if (Matrix != null) Face = new FaceService(this);   // started by Program after the greeting
         }
 
         /// <summary>Light patterns over <see cref="Leds"/> (null without LEDs). Everything that colours the LEDs goes
         /// through it, so its animation thread never fights another writer.</summary>
         public LightsService Lights;
+
+        /// <summary>The eyes over <see cref="Matrix"/> (null without the matrix). Everything that draws on the matrix
+        /// goes through it, for the same reason.</summary>
+        public FaceService Face;
 
         void Try(string part, Action init)
         {

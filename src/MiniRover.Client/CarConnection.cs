@@ -219,6 +219,10 @@ public sealed class CarConnection : IAsyncDisposable
     /// <summary>A light pattern animated on the car (CarLink.Lights* modes); the colour is for LightsSolid.</summary>
     public void Lights(int mode, byte r = 0, byte g = 0, byte b = 0, int param = 0) => Send(CarLink.EncodeLights(mode, r, g, b, param));
 
+    /// <summary>What the eyes show: <see cref="CarLink.FaceAlive"/>, <see cref="CarLink.FaceMood"/> (arg = an
+    /// <see cref="EyeArt"/> mood) or <see cref="CarLink.FaceText"/> (arg = passes, 0 = keep scrolling).</summary>
+    public void Face(int mode, int arg = 0, string? text = null) => Send(CarLink.EncodeFace(mode, arg, text));
+
     public void Buzzer(int hz, int ms) => Send([CarLink.MsgBuzzer, (byte)hz, (byte)(hz >> 8), (byte)ms, (byte)(ms >> 8)]);
 
     /// <summary>A 16-byte eye frame: 8 rows per eye, bit 7 = leftmost pixel.</summary>

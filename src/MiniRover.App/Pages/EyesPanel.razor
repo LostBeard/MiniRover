@@ -1,0 +1,73 @@
+@using MiniRover.Client
+@using MiniRover.Protocol
+
+@* The car's LED eyes. The car animates them itself (blinking, looking where it steers, scrolling text), so they
+   keep going without the app. The pictures are drawn with the same EyeArt code the car uses. *@
+<div class="mr-eyes" data-test="eyes-panel">
+    <div class="mr-eye-choices">
+        @foreach (var choice in Choices)
+        {
+            <button type="button" class="mr-eye-choice@(IsActive(choice) ? " active" : "")" @onclick="@(() => Pick(choice))"
+                    data-test="@($"eyes-{choice.Name}")" aria-pressed="@(IsActive(choice) ? "true" : "false")">
+                <EyePreview Frame="@choice.Preview" />
+                <span>@choice.Name</span>
+            </button>
+        }
+    </div>
+    <div class="mr-eye-text">
+        <UiInput @bind-Value="_text" maxlength="48" placeholder="Write a message for the eyes" data-test="eyes-text" />
+        <UiButton OnClick="SendText" data-test="eyes-send">Show</UiButton>
+    </div>
+    <label class="mr-check"><input type="checkbox" checked="@_keepScrolling" @onchange="@(e => _keepScrolling = e.Value is true || e.Value?.ToString() == "true")" data-test="eyes-loop" /> Keep scrolling (otherwise once, then back to normal eyes)</label>
+    @if (!string.IsNullOrWhiteSpace(_text))
+    {
+        <p class="mr-muted mr-eye-start">Starts like this: <EyePreview Frame="@EyeArt.Text(_text, 0)" /></p>
+    }
+    <p class="mr-muted">Letters, numbers and ! ? . , - + : ' / = ( ). A * draws a heart.</p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public CarConnection Link { get; set; } = default!;
+
+    sealed record Choice(string Name, int Mode, int Arg, byte[] Preview);
+
+    static readonly Choice[] Choices =
+    [
+        new("normal", CarLink.FaceAlive, 0, EyeArt.Open()),
+        new("happy", CarLink.FaceMood, EyeArt.MoodHappy, EyeArt.Mood(EyeArt.MoodHappy)),
+        new("love", CarLink.FaceMood, EyeArt.MoodHeart, EyeArt.Mood(EyeArt.MoodHeart)),
+        new("surprised", CarLink.FaceMood, EyeArt.MoodSurprised, EyeArt.Mood(EyeArt.MoodSurprised)),
+        new("sad", CarLink.FaceMood, EyeArt.MoodSad, EyeArt.Mood(EyeArt.MoodSad)),
+        new("angry", CarLink.FaceMood, EyeArt.MoodAngry, EyeArt.Mood(EyeArt.MoodAngry)),
+        new("sleepy", CarLink.FaceMood, EyeArt.MoodSleepy, EyeArt.Mood(EyeArt.MoodSleepy)),
+    ];
+
+    // What this page last asked for. Text that scrolls once goes back to normal by itself on the car.
+    int _mode = CarLink.FaceAlive, _arg;
+    string _text = "";
+    bool _keepScrolling;
+
+    bool IsActive(Choice c) => c.Mode == _mode && (c.Mode != CarLink.FaceMood || c.Arg == _arg);
+
+    void Pick(Choice c)
+    {
+        _mode = c.Mode;
+        _arg = c.Arg;
+        Send(c.Mode, c.Arg, null);
+    }
+
+    void SendText()
+    {
+        string text = (_text ?? "").Trim();
+        if (text.Length == 0) return;
+        // Once: the car returns to normal eyes after one pass, so mark "normal" as the choice to come back to.
+        _mode = _keepScrolling ? CarLink.FaceText : CarLink.FaceAlive;
+        Send(CarLink.FaceText, _keepScrolling ? 0 : 1, text);
+    }
+
+    void Send(int mode, int arg, string? text)
+    {
+        if (Link?.IsConnected != true) return;
+        try { Link.Face(mode, arg, text); } catch (InvalidOperationException) { }
+    }
+}

@@ -24,13 +24,15 @@
     <Compile Include="..\..\src\MiniRover.Protocol\CarLink.cs">
       <Link>Protocol\CarLink.cs</Link>
     </Compile>
+    <Compile Include="..\..\src\MiniRover.Protocol\EyeArt.cs">
+      <Link>Protocol\EyeArt.cs</Link>
+    </Compile>
     <Compile Include="RtcLinkService.cs" />
     <Compile Include="BatteryService.cs" />
     <Compile Include="BleSetupService.cs" />
     <Compile Include="Car.cs" />
-    <Compile Include="Digits.cs" />
     <Compile Include="DriveService.cs" />
-    <Compile Include="Eyes.cs" />
+    <Compile Include="FaceService.cs" />
     <Compile Include="HttpServer.cs" />
     <Compile Include="LightsService.cs" />
     <Compile Include="Program.cs" />
