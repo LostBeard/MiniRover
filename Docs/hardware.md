@@ -22,14 +22,14 @@ All I2C devices share one bus: **SDA = GPIO13, SCL = GPIO14**.
 |---|---|---|
 | `0x5F` | PCA9685 16-channel PWM | 2 servos + 4 motor driver inputs |
 | `0x20` | PCF8574 I/O expander | 3 line-tracking sensors |
-| `0x71` | VK16K33 (HT16K33 compatible) | Two 8x8 LED matrices on the camera head |
+| `0x71` | VK16K33 (HT16K33 compatible) | Two 8x8 LED matrices on the camera head (only present when the head is plugged in) |
 
 ## PCA9685 channels
 
 | Channel | Use |
 |---|---|
-| 0 | Servo 1 - camera **pan** (left/right) |
-| 1 | Servo 2 - camera **tilt** (up/down) |
+| 0 | Servo 1 - camera **pan**: below 90 degrees turns the camera to the car's right, above 90 to its left |
+| 1 | Servo 2 - camera **tilt**: above 90 degrees looks up (Freenove limits tilt to 80..180) |
 | 2-7 | Free |
 | 8, 9 | Motor M2 (IN1 = 9, IN2 = 8) |
 | 10, 11 | Motor M4 (IN1 = 10, IN2 = 11) |
@@ -81,6 +81,7 @@ Freenove ships two camera types, **OV2640** or **GC0308**, and the board cannot 
 
 - **2x 18650 Li-ion cells** in series (2S): 8.4 V full, about 7.4 V nominal. Not included in the kit. Freenove's [battery list](https://github.com/Freenove/Freenove_Battery_List/blob/main/18650_Flat-Top_Unprotected.md) recommends flat-top cells that can supply more than 3 A.
 - **USB does not charge the cells.** Use an external 18650 charger.
+- **The power button only switches the pack on with USB unplugged** (observed on the first car tested): unplug USB, press the button, plug USB back in. With the pack off, USB still powers the logic (shield LEDs lit), the battery reads 0 V, and MiniRover keeps the motors and servos off.
 - Freenove warns that assembling or running the car without proper batteries can damage the servos.
 
 ## What the kit does not have

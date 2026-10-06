@@ -57,6 +57,10 @@ if (args.Length >= 3 && args[0] == "hw")
                     break;
                 case "set": await hw.HardwareAsync([MiniRover.Protocol.BleSetup.OpSetting, .. System.Text.Encoding.UTF8.GetBytes(p[1])]); break;
                 case "wait": await Task.Delay(int.Parse(p[1])); break;
+                case "showcode":
+                    // Shows a fresh code on the LED eyes (this ends the authorisation, so keep it last).
+                    await hw.RequestCodeAsync();
+                    break;
                 default: Console.WriteLine("  unknown command"); break;
             }
             Console.WriteLine("  ok");

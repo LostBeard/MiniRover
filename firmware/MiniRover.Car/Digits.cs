@@ -38,8 +38,9 @@ namespace MiniRover.Car
                     {
                         if ((bits & (4 >> c)) != 0)
                         {
-                            // Frame rows 0..7 per matrix, bit n = column n; rows 1..5 centre the 5-row glyph.
-                            frame[matrix * 8 + 1 + row] |= (byte)(1 << (colOffset + c));
+                            // Frame rows 0..7 per matrix; bit 7 is the LEFTMOST pixel seen facing the car (verified on
+                            // hardware: low-bit-left rendered "2270" as mirrored "5507"). Rows 1..5 centre the glyph.
+                            frame[matrix * 8 + 1 + row] |= (byte)(0x80 >> (colOffset + c));
                         }
                     }
                 }
