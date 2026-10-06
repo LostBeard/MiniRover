@@ -5,6 +5,8 @@ namespace MiniRover.Car
 {
     public static class Program
     {
+        public const string FirmwareVersion = "0.1.0";
+
         public static void Main()
         {
             System.Diagnostics.Debug.WriteLine("MiniRover car firmware starting");
@@ -26,9 +28,37 @@ namespace MiniRover.Car
             }
             if (car.Buzzer != null) car.Buzzer.Play(new int[] { 1568, 70, 0, 30, 2093, 90 });
 
-            var wifi = new WifiService();
+            var wifi = new WifiService(settings);
             wifi.Start();
             if (wifi.InSetupMode && car.Matrix != null) car.Matrix.Show(Eyes.Setup);
+
+            // BLE setup: always in setup mode; after a BLE-provisioned reboot, for a short window so the app can
+            // reconnect and confirm the car joined the network. Never while driving.
+            var ble = new BleSetupService(car, wifi, settings, wifi.SetupSsid);
+            bool announce = !wifi.InSetupMode && settings.AnnounceAfterSetup;
+            if (wifi.InSetupMode || announce)
+            {
+                try
+                {
+                    ble.Start();
+                }
+                catch (Exception ex)
+                {
+                    car.Faults += (car.Faults.Length > 0 ? "; " : "") + "ble: " + ex.Message;
+                    System.Diagnostics.Debug.WriteLine("BLE start FAILED: " + ex.Message);
+                }
+            }
+            if (announce)
+            {
+                settings.AnnounceAfterSetup = false;
+                settings.Save();
+                new Thread(() =>
+                {
+                    Thread.Sleep(Protocol.BleSetup.ConnectedAdvertiseSeconds * 1000);
+                    ble.Stop();
+                    System.Diagnostics.Debug.WriteLine("BLE setup window closed");
+                }).Start();
+            }
 
             var api = new WebApi(car, wifi);
             new HttpServer(80, api.Handle).Start();

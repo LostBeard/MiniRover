@@ -47,3 +47,6 @@ sdkconfig.old
 # OS noise
 Thumbs.db
 .DS_Store
+
+# local test/deploy logs
+*.log

@@ -36,6 +36,16 @@ namespace MiniRover.Car
 
         public int LedBrightness { get => (int)GetDouble("led.brightness", 64); set => Set("led.brightness", value); }
 
+        /// <summary>20-byte signaling room key (hex) shared with paired browsers; empty until first pairing.</summary>
+        public string RoomKeyHex { get => GetString("pair.roomkey", ""); set => SetString("pair.roomkey", value); }
+
+        /// <summary>Set when WiFi was just provisioned over BLE: on the next boot the car keeps advertising for a
+        /// while so the app can confirm it joined.</summary>
+        public bool AnnounceAfterSetup { get => GetDouble("ble.announce", 0) != 0; set => Set("ble.announce", value ? 1 : 0); }
+
+        /// <summary>Why the last WiFi connection attempt failed (shown to the app in setup mode).</summary>
+        public string LastWifiError { get => GetString("wifi.error", ""); set => SetString("wifi.error", value); }
+
         public static Settings Load()
         {
             var s = new Settings();
@@ -82,6 +92,24 @@ namespace MiniRover.Car
                 {
                     fs.Write(bytes, 0, bytes.Length);
                 }
+            }
+        }
+
+        string GetString(string key, string fallback)
+        {
+            lock (_lock)
+            {
+                return _values[key] as string ?? fallback;
+            }
+        }
+
+        void SetString(string key, string value)
+        {
+            // One line per key in the file: keep values single-line.
+            if (value != null && (value.IndexOf((char)10) >= 0 || value.IndexOf((char)13) >= 0)) throw new ArgumentException(nameof(value));
+            lock (_lock)
+            {
+                _values[key] = value ?? "";
             }
         }
 

@@ -24,6 +24,14 @@ namespace MiniRover.Car
         public string StationSsid { get; private set; } = "";
         public string SetupSsid { get; private set; } = "";
 
+        readonly Settings _settings;
+
+        public WifiService(Settings settings)
+        {
+            _settings = settings;
+            SetupSsid = BuildSetupSsid();
+        }
+
         /// <summary>Brings WiFi up. Returns once connected, or once the setup access point is running.
         /// May reboot the device (entering setup mode).</summary>
         public void Start()
@@ -35,7 +43,14 @@ namespace MiniRover.Car
 
             if ((ap.Options & WirelessAPConfiguration.ConfigurationOptions.Enable) != 0)
             {
-                // Booted into setup mode (the AP auto-started); give it its fixed address.
+                // Booted into setup mode (the AP auto-started). The radio must be AP+STA to scan for the app's
+                // network list; a car put into setup mode by older firmware lacks the station flag, so fix it once.
+                if ((sta.Options & Wireless80211Configuration.ConfigurationOptions.Enable) == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine("WiFi: enabling the station interface for scanning (one reboot)");
+                    EnterSetupMode();
+                    return;
+                }
                 InSetupMode = true;
                 NetworkInterface apIf = FindInterface(NetworkInterfaceType.WirelessAP);
                 if (apIf != null && apIf.IPv4Address != SetupAddress)
@@ -59,8 +74,16 @@ namespace MiniRover.Car
             bool ok = WifiNetworkHelper.ConnectDhcp(StationSsid, sta.Password, WifiReconnectionKind.Automatic, false, 0, cts.Token);
             if (!ok)
             {
-                // Keep the saved network (the router may just be off) but let the owner fix it.
-                System.Diagnostics.Debug.WriteLine("WiFi: could not connect (" + WifiNetworkHelper.Status.ToString() + "), entering setup mode");
+                // Keep the saved network (the router may just be off) but let the owner fix it. The reason is shown
+                // to the app over BLE in setup mode.
+                string reason = WifiNetworkHelper.Status.ToString();
+                if (WifiNetworkHelper.HelperException != null) reason += ": " + WifiNetworkHelper.HelperException.Message;
+                System.Diagnostics.Debug.WriteLine("WiFi: could not connect (" + reason + "), entering setup mode");
+                if (_settings != null)
+                {
+                    _settings.LastWifiError = "could not join '" + StationSsid + "' (" + reason + ")";
+                    _settings.Save();
+                }
                 EnterSetupMode();
                 return;
             }
@@ -82,6 +105,14 @@ namespace MiniRover.Car
             ap.MaxConnections = 2;
             ap.Options = WirelessAPConfiguration.ConfigurationOptions.Enable | WirelessAPConfiguration.ConfigurationOptions.AutoStart;
             ap.SaveConfiguration();
+
+            // Keep the station interface ENABLED (but not auto-connecting) so the radio runs AP+STA: an AP-only ESP32
+            // cannot scan, and the app's network list comes from a scan (nanoFramework picks APSTA only when the
+            // station config has the Enable flag - NF_ESP32_Wireless.cpp). No AutoConnect: retrying a network that
+            // just failed would hop channels under the setup access point.
+            Wireless80211Configuration sta = Wireless80211Configuration.GetAllWireless80211Configurations()[0];
+            sta.Options = Wireless80211Configuration.ConfigurationOptions.Enable;
+            sta.SaveConfiguration();
             Thread.Sleep(200);
             Power.RebootDevice();
         }
