@@ -188,7 +188,7 @@ namespace MiniRover.Car
                   .Append(",\"raw\":").Append(b.LastRaw.ToString())
                   .Append(",\"underLoad\":").Append(B(b.LastSampleUnderLoad))
                   .Append(",\"noBattery\":").Append(B(b.NoBattery))
-                  .Append(",\"level\":\"").Append(b.Level.ToString()).Append("\"}");
+                  .Append(",\"level\":\"").Append(BatteryLevelNames.Name(b.Level)).Append("\"}");
             }
             if (_car.Line != null) sb.Append(",\"line\":").Append(SafeInt(() => _car.Line.Read()).ToString());
             if (_car.Light != null) sb.Append(",\"light\":").Append(SafeInt(() => _car.Light.ReadRaw()).ToString());

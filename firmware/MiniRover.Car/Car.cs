@@ -46,6 +46,22 @@ namespace MiniRover.Car
             Try("adc", () =>
             {
                 adc = new AdcController();
+                // TEMP DIAGNOSTIC (bring-up 2026-10-06): raw value of every ADC1 channel, to map channel -> pin.
+                for (int c = 0; c < 8; c++)
+                {
+                    try
+                    {
+                        using (AdcChannel d = adc.OpenChannel(c))
+                        {
+                            System.Diagnostics.Debug.WriteLine("ADCDIAG ch" + c + " raw=" + d.ReadValue());
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine("ADCDIAG ch" + c + " failed: " + ex.Message);
+                    }
+                }
+                System.Diagnostics.Debug.WriteLine("ADCDIAG max=" + adc.MaxValue + " bits=" + adc.ResolutionInBits + " channels=" + adc.ChannelCount);
                 using (AdcChannel ch = adc.OpenChannel(BoardPins.BatteryAdcChannel))
                 {
                     int sum = 0;

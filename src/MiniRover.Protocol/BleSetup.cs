@@ -47,6 +47,14 @@ namespace MiniRover.Protocol
         public const byte OpGetPairing = 0x05;
         public const byte OpFinish = 0x06;       // stop advertising (normal mode) / leave setup
 
+        // Hardware check / calibration (authorised only; every motion goes through the car's safety checks).
+        public const byte OpServo = 0x10;        // [u8 0=pan 1=tilt 2=centre both][u16 BE degrees*10]
+        public const byte OpMotor = 0x11;        // [u8 motor 0..3 or 0xFF=all][i8 percent -100..100][u16 BE milliseconds]
+        public const byte OpLeds = 0x12;         // [r][g][b] all 12 LEDs
+        public const byte OpBuzzer = 0x13;       // [u16 BE hz][u16 BE milliseconds]
+        public const byte OpReadSensors = 0x14;  // -> EvSensors
+        public const byte OpSetting = 0x15;      // [UTF-8 "key=value"] -> saved on the car, EvOk
+
         // Car -> app (Events characteristic).
         public const byte EvCodeShown = 0x81;
         public const byte EvAuthResult = 0x82;   // [u8 ok][u8 attemptsLeft]
@@ -54,6 +62,8 @@ namespace MiniRover.Protocol
         public const byte EvScanDone = 0x84;     // [u8 count]
         public const byte EvWifiSaved = 0x85;    // car is rebooting to join the network
         public const byte EvPairingInfo = 0x86;  // [20 room key][u8 nameLen][name UTF-8]
+        public const byte EvSensors = 0x87;      // [UTF-8 "key=value\n" lines]
+        public const byte EvOk = 0x88;           // [opcode acknowledged]
         public const byte EvError = 0x8F;        // [UTF-8 message]
 
         public static byte[] EncodeSetWifi(byte[] ssidUtf8, byte[] passwordUtf8)

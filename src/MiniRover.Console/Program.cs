@@ -13,6 +13,62 @@ if (args.Length >= 3 && args[0] == "webtest")
         args.Length > 5 ? args[5] : Path.Combine(Path.GetTempPath(), "minirover-webtest-shots"));
 }
 
+// minirover hw <COMx> <command>; <command>; ...   (code read from the car's debug output)
+//   sensors | servo center | servo pan|tilt <deg> | motor <0-3|all> <percent> <ms> | leds <r> <g> <b> | beep <hz> <ms> | set <key=value> | wait <ms>
+if (args.Length >= 3 && args[0] == "hw")
+{
+    using var dbg = NfDebugListener.Attach(args[1]);
+    var hwCode = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+    dbg.Line += line =>
+    {
+        if (line.StartsWith("BLE") || line.Contains("Battery") || line.Contains("Exception")) Console.WriteLine("[car] " + line);
+        Match m = Regex.Match(line, @"BLE setup code: (\d{4})");
+        if (m.Success) hwCode.TrySetResult(m.Groups[1].Value);
+    };
+    await using var hw = new BleSetupClient();
+    await hw.ConnectAsync("MiniRover", TimeSpan.FromSeconds(30));
+    await hw.RequestCodeAsync();
+    if (await Task.WhenAny(hwCode.Task, Task.Delay(10_000)) != hwCode.Task) throw new TimeoutException("no setup code on the debug channel");
+    var (authOk, _) = await hw.SubmitCodeAsync(await hwCode.Task);
+    if (!authOk) throw new InvalidOperationException("code rejected");
+
+    foreach (string raw in string.Join(' ', args.Skip(2)).Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+        string[] p = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        Console.WriteLine("> " + raw);
+        try
+        {
+            switch (p[0])
+            {
+                case "sensors": Console.Write(await hw.ReadSensorsAsync()); break;
+                case "servo" when p[1] == "center": await hw.HardwareAsync([MiniRover.Protocol.BleSetup.OpServo, 2, 0, 0]); break;
+                case "servo":
+                    int tenths = (int)Math.Round(double.Parse(p[2]) * 10);
+                    await hw.HardwareAsync([MiniRover.Protocol.BleSetup.OpServo, (byte)(p[1] == "pan" ? 0 : 1), (byte)(tenths >> 8), (byte)tenths]);
+                    break;
+                case "motor":
+                    int ms = int.Parse(p[3]);
+                    await hw.HardwareAsync([MiniRover.Protocol.BleSetup.OpMotor, p[1] == "all" ? (byte)0xFF : byte.Parse(p[1]), (byte)(sbyte)int.Parse(p[2]), (byte)(ms >> 8), (byte)ms]);
+                    break;
+                case "leds": await hw.HardwareAsync([MiniRover.Protocol.BleSetup.OpLeds, byte.Parse(p[1]), byte.Parse(p[2]), byte.Parse(p[3])]); break;
+                case "beep":
+                    int hz = int.Parse(p[1]), bms = int.Parse(p[2]);
+                    await hw.HardwareAsync([MiniRover.Protocol.BleSetup.OpBuzzer, (byte)(hz >> 8), (byte)hz, (byte)(bms >> 8), (byte)bms]);
+                    break;
+                case "set": await hw.HardwareAsync([MiniRover.Protocol.BleSetup.OpSetting, .. System.Text.Encoding.UTF8.GetBytes(p[1])]); break;
+                case "wait": await Task.Delay(int.Parse(p[1])); break;
+                default: Console.WriteLine("  unknown command"); break;
+            }
+            Console.WriteLine("  ok");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("  FAILED: " + ex.Message);
+        }
+    }
+    return 0;
+}
+
 if (args.Length == 0 || args[0] != "setup")
 {
     Console.WriteLine("usage: minirover setup [--name MiniRover] [--code 1234 | --code-from-debug COM8] [--scan] [--pairing] [--wifi <ssid> <password>]");

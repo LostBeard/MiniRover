@@ -148,6 +148,21 @@ public sealed class BleSetupClient : IAsyncDisposable
         return (key, Encoding.UTF8.GetString(ev, 2 + BleSetup.RoomKeyBytes, n));
     }
 
+    /// <summary>Sends a hardware check command and waits for the car's acknowledgement.</summary>
+    public async Task HardwareAsync(byte[] frame)
+    {
+        await SendAsync(frame);
+        byte[] ok = WaitFor(BleSetup.EvOk, TimeSpan.FromSeconds(5));
+        if (ok.Length < 2 || ok[1] != frame[0]) throw new InvalidOperationException($"unexpected ack for 0x{frame[0]:X2}");
+    }
+
+    public async Task<string> ReadSensorsAsync()
+    {
+        await SendAsync([BleSetup.OpReadSensors]);
+        byte[] ev = WaitFor(BleSetup.EvSensors, TimeSpan.FromSeconds(5));
+        return Encoding.UTF8.GetString(ev, 1, ev.Length - 1);
+    }
+
     public async Task SetWifiAsync(string ssid, string password)
     {
         await SendAsync(BleSetup.EncodeSetWifi(Encoding.UTF8.GetBytes(ssid), Encoding.UTF8.GetBytes(password)));

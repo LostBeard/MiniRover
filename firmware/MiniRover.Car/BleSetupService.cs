@@ -143,6 +143,14 @@ namespace MiniRover.Car
                     case BleSetup.OpFinish:
                         Stop();
                         break;
+                    case BleSetup.OpServo:
+                    case BleSetup.OpMotor:
+                    case BleSetup.OpLeds:
+                    case BleSetup.OpBuzzer:
+                    case BleSetup.OpReadSensors:
+                    case BleSetup.OpSetting:
+                        if (RequireAuth()) HardwareCommand(frame);
+                        break;
                     default:
                         SendError("unknown opcode 0x" + frame[0].ToString("X2"));
                         break;
@@ -302,6 +310,120 @@ namespace MiniRover.Car
             Notify(new byte[] { BleSetup.EvWifiSaved });
             Thread.Sleep(400); // let the notification leave before the radio goes down
             _wifi.SaveNetworkAndReboot(Encoding.UTF8.GetString(ssid, 0, ssid.Length), Encoding.UTF8.GetString(password, 0, password.Length));
+        }
+
+        /// <summary>
+        /// Hardware check / calibration commands. Motion goes through the same guards as driving: motors via
+        /// DriveService (hold time + deadman, speed limit, battery protection), servos only with a battery present
+        /// (on USB power alone the servo current browns the ESP32 out).
+        /// </summary>
+        void HardwareCommand(byte[] f)
+        {
+            switch (f[0])
+            {
+                case BleSetup.OpServo:
+                    if (f.Length < 4) { SendError("bad servo frame"); return; }
+                    if (_car.Servos == null) { SendError("servo controller not available: " + _car.Faults); return; }
+                    if (!_car.HasBattery) { SendError("no battery detected: servos stay off on USB power"); return; }
+                    double deg = ((f[2] << 8) | f[3]) / 10.0;
+                    if (f[1] == 0) _car.Servos.SetPan(deg);
+                    else if (f[1] == 1) _car.Servos.SetTilt(deg);
+                    else _car.Servos.CenterBoth();
+                    break;
+
+                case BleSetup.OpMotor:
+                    if (f.Length < 5) { SendError("bad motor frame"); return; }
+                    if (_car.Drive == null) { SendError("motor controller not available: " + _car.Faults); return; }
+                    if (_car.Drive.BatteryLevel == BatteryLevel.Critical) { SendError("battery critical or not detected: motors refused"); return; }
+                    double speed = (sbyte)f[2] / 100.0;
+                    int ms = (f[3] << 8) | f[4];
+                    if (f[1] == 0xFF) _car.Drive.Drive(speed, speed, ms);
+                    else _car.Drive.DriveMotor(f[1], speed, ms);
+                    break;
+
+                case BleSetup.OpLeds:
+                    if (f.Length < 4) { SendError("bad LED frame"); return; }
+                    if (_car.Leds == null) { SendError("LEDs not available: " + _car.Faults); return; }
+                    _car.Leds.Fill(f[1], f[2], f[3]);
+                    _car.Leds.Show();
+                    break;
+
+                case BleSetup.OpBuzzer:
+                    if (f.Length < 5) { SendError("bad buzzer frame"); return; }
+                    if (_car.Buzzer == null) { SendError("buzzer not available"); return; }
+                    int hz = (f[1] << 8) | f[2], beepMs = (f[3] << 8) | f[4];
+                    new Thread(() => _car.Buzzer.Beep(hz, beepMs > 2000 ? 2000 : beepMs)).Start();
+                    break;
+
+                case BleSetup.OpReadSensors:
+                    byte[] text = Encoding.UTF8.GetBytes(BuildSensors());
+                    int n = text.Length > 180 ? 180 : text.Length;
+                    byte[] ev = new byte[1 + n];
+                    ev[0] = BleSetup.EvSensors;
+                    Array.Copy(text, 0, ev, 1, n);
+                    Notify(ev);
+                    return;
+
+                case BleSetup.OpSetting:
+                    string kv = Encoding.UTF8.GetString(f, 1, f.Length - 1);
+                    if (!ApplySetting(kv)) { SendError("unknown or bad setting: " + kv); return; }
+                    break;
+            }
+            Notify(new byte[] { BleSetup.EvOk, f[0] });
+        }
+
+        bool ApplySetting(string kv)
+        {
+            int eq = kv.IndexOf('=');
+            if (eq <= 0) return false;
+            string key = kv.Substring(0, eq);
+            double v;
+            try { v = double.Parse(kv.Substring(eq + 1)); } catch { return false; }
+            switch (key)
+            {
+                case "pan.trim": _settings.PanTrim = v; break;
+                case "tilt.trim": _settings.TiltTrim = v; break;
+                case "battery.coef": _settings.BatteryCoefficient = v; break;
+                case "drive.limit": _settings.SpeedLimit = v; break;
+                case "motor.minduty": _settings.MotorMinimumDuty = (int)v; break;
+                case "led.brightness": _settings.LedBrightness = (int)v; break;
+                default:
+                    if (key.Length == 13 && key.StartsWith("motor") && key.Substring(6) == ".invert")
+                    {
+                        _settings.SetMotorInverted(key[5] - '0', v != 0);
+                        break;
+                    }
+                    if (key.Length == 11 && key.StartsWith("motor") && key.Substring(6) == ".gain")
+                    {
+                        _settings.SetMotorGain(key[5] - '0', v);
+                        break;
+                    }
+                    return false;
+            }
+            _settings.Save();
+            _car.ApplySettings();
+            return true;
+        }
+
+        string BuildSensors()
+        {
+            var sb = new StringBuilder();
+            if (_car.Battery != null)
+            {
+                sb.Append("battRaw=").Append(_car.Battery.LastRaw.ToString()).Append('\n');
+                sb.Append("battV=").Append(_car.Battery.Volts.ToString("F2")).Append('\n');
+                sb.Append("battLevel=").Append(BatteryLevelNames.Name(_car.Battery.Level)).Append('\n');
+            }
+            sb.Append("hasBattery=").Append(_car.HasBattery ? "1" : "0").Append('\n');
+            if (_car.Light != null) sb.Append("light=").Append(_car.Light.ReadRaw().ToString()).Append('\n');
+            if (_car.Line != null)
+            {
+                try { sb.Append("line=").Append(_car.Line.Read().ToString()).Append('\n'); }
+                catch (Exception ex) { sb.Append("line=err ").Append(ex.Message).Append('\n'); }
+            }
+            if (_car.Drive != null) sb.Append("moving=").Append(_car.Drive.Moving ? "1" : "0").Append('\n');
+            if (_car.LastIrTime != DateTime.MinValue) sb.Append("ir=0x").Append(_car.LastIrCode.ToString("X8")).Append('\n');
+            return sb.ToString();
         }
 
         string BuildInfo()

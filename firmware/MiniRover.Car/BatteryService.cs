@@ -125,7 +125,7 @@ namespace MiniRover.Car
             Level = level;
             _drive.BatteryLevel = level;
             if (level == BatteryLevel.Critical) _drive.Stop();
-            System.Diagnostics.Debug.WriteLine("Battery level -> " + level.ToString() + " (" + Volts.ToString("F2") + " V)");
+            System.Diagnostics.Debug.WriteLine("Battery level -> " + BatteryLevelNames.Name(level) + " (" + Volts.ToString("F2") + " V)");
         }
     }
 }

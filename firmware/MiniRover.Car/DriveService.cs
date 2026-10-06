@@ -129,4 +129,18 @@ namespace MiniRover.Car
         Low = 1,
         Critical = 2,
     }
+
+    public static class BatteryLevelNames
+    {
+        /// <summary>nanoFramework's enum ToString() prints the number, not the name.</summary>
+        public static string Name(BatteryLevel level)
+        {
+            switch (level)
+            {
+                case BatteryLevel.Ok: return "Ok";
+                case BatteryLevel.Low: return "Low";
+                default: return "Critical";
+            }
+        }
+    }
 }
