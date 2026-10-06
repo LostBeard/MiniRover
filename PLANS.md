@@ -97,7 +97,10 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [x] DTLS + SCTP + two data channels with the desktop client (SipSorcery via SpawnDev.RTC)
 - [x] DTLS + data channels with Chrome (the browser app): connect + authenticate in 6.8-8.3 s (`minirover drivetest`)
 - [x] Native camera task (esp32-camera, OV2640 / GC0308 detected; GC0308 gets software JPEG): OV2640 320x240 q12 = ~6 KB/frame, 14.6 fps over 90 s to the desktop, 14.7 fps decoded in Chrome
-- [ ] Measure fps / latency at other sizes and qualities; glass-to-glass latency; a real GC0308
+- [ ] Measure fps / latency at other sizes and qualities; glass-to-glass latency; a real GC0308. Measured so far (OV2640, q12): 320x240 13.6-15 fps ~6 KB; 640x480 7.6 fps ~15.6 KB
+- [x] Camera frame buffers sized for the largest allowed picture (esp32-camera never grows them; a size increase used to overrun them)
+- [ ] OPEN: the car reset 3 times during camera size changes / wheel tests with the pack at ~20% (7.2 V); afterwards I2C and camera did not answer until a clean reset. Not reproduced on a fresh boot (VGA switch OK). Re-test on a charged pack: brownout vs software
+- [x] I2C bus recovery at boot (9 clocks + STOP) and the boot battery voltage in /status
 - [x] `MiniRover.Native` interop (firmware/native): WiFi RSSI of the connected access point, WiFi modem sleep control
 - [x] Memory budget with camera + BLE + WebRTC (measured per boot step; see the sdkconfig comments): internal 27 KB during the BLE window (was 2 KB), PSRAM 650+ KB native free (was 3 KB)
 - [x] Car command loop under video load: bounded receive batches, newest drive wins, identical motor writes skipped (telemetry had stopped completely while driving with video)
@@ -127,7 +130,8 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [x] Touch sticks (pointer capture; drive + camera aim), keyboard (WASD / arrows, keys dropped on window blur), speed levels: touch drag and key W verified moving the real car from Chrome, release stops it (125-314 ms to telemetry "stopped")
 - [ ] Gamepad (standard mapping, triggers + sticks, A/B/Y): written, not yet tried with a real pad; rumble
 - [x] Lights toggle, horn
-- [ ] LED-matrix eyes and text, light patterns
+- [x] Light patterns animated on the car (LightsService): dim, headlights (+ brake lights and turn signals once calibrated), hazard, police, rainbow, battery gauge, off; app button cycles them, verified on the car via /status. Light corner calibration in Settings (groups or single LEDs), verified stored on the car; the real corner layout still has to be done by someone looking at the car
+- [ ] LED-matrix eyes: animations (look where the car steers, blink) and scrolling text
 - [ ] Sensors page with live charts
 - [x] Battery: Li-ion curve (%), time remaining from the idle-reading trend (unit-tested), low / empty / switch-off banners (banners not yet seen with a real low pack)
 - [x] Settings panel on the drive page (live link): top speed, steering sensitivity + stick curve (per car), camera size/quality/fps/orientation, camera aim (pan/tilt trim, camera held centered), per-wheel test / reversed / balance, battery calibration from a multimeter reading, LED brightness, HTTP test API, signaling server. Verified from Chrome: values match the car, wheel test spins a wheel, a change is stored

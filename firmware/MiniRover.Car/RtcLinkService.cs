@@ -241,11 +241,11 @@ namespace MiniRover.Car
                     }
                     break;
                 case CarLink.MsgLeds:
-                    if (len >= 4 && _car.Leds != null)
-                    {
-                        _car.Leds.Fill(_rx[o + 1], _rx[o + 2], _rx[o + 3]);
-                        _car.Leds.Show();
-                    }
+                    if (len >= 4 && _car.Lights != null) _car.Lights.Set(LightsService.ModeSolid, _rx[o + 1], _rx[o + 2], _rx[o + 3], 0);
+                    break;
+                case CarLink.MsgLights:
+                    // [mode][r][g][b][param]
+                    if (len >= 6 && _car.Lights != null) _car.Lights.Set(_rx[o + 1], _rx[o + 2], _rx[o + 3], _rx[o + 4], _rx[o + 5]);
                     break;
                 case CarLink.MsgBuzzer:
                     if (len >= 5 && _car.Buzzer != null)

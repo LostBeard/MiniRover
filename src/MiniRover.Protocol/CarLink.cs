@@ -57,6 +57,7 @@ namespace MiniRover.Protocol
         public const byte MsgSetting = 0x26;    // [UTF-8 "key=value"]
         public const byte MsgStop = 0x27;       // stop all motors now
         public const byte MsgSettingsRequest = 0x28; // the car answers with MsgSettings
+        public const byte MsgLights = 0x2B;     // [mode][r][g][b][param]: a light pattern, animated on the car (Lights* modes)
         public const byte MsgPing = 0x2A;       // [token u32]: the car answers MsgPong with the same token (link round trip)
         public const byte MsgMotorTest = 0x29;  // [motor u8 0..3][percent i8][holdMs u16]: one wheel (setup / calibration)
 
@@ -199,6 +200,21 @@ namespace MiniRover.Protocol
             b[0] = MsgSettings;
             Array.Copy(t, 0, b, 1, len);
             return b;
+        }
+
+        // Light patterns (MsgLights). The car's LightsService implements them.
+        public const int LightsOff = 0;
+        public const int LightsSolid = 1;
+        public const int LightsHeadlights = 2;   // + automatic brake lights and turn signals once the corners are calibrated
+        public const int LightsHazard = 3;
+        public const int LightsPolice = 4;
+        public const int LightsRainbow = 5;
+        public const int LightsBattery = 6;
+        public const int LightsIdentify = 7;     // param 0..3: one group of three LEDs lit white (corner calibration)
+
+        public static byte[] EncodeLights(int mode, byte r, byte g, byte b, int param)
+        {
+            return new byte[] { MsgLights, (byte)Clamp(mode, 0, 255), r, g, b, (byte)Clamp(param, 0, 255) };
         }
 
         public static byte[] EncodePing(uint token) => EncodeToken(MsgPing, token);

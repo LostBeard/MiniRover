@@ -15,7 +15,7 @@ namespace MiniRover.ConsoleApp;
 /// </summary>
 public static class DriveTest
 {
-    public static async Task<int> RunAsync(string webRoot, int httpPort, int cdpPort, string shotDir, string? rebootPort = null, int lossPermille = 0, string? carHttp = null)
+    public static async Task<int> RunAsync(string webRoot, int httpPort, int cdpPort, string shotDir, string? rebootPort = null, int lossPermille = 0, string? carHttp = null, bool calibrateLights = false)
     {
         if (!File.Exists(Path.Combine(webRoot, "index.html"))) throw new FileNotFoundException("publish the app first", Path.Combine(webRoot, "index.html"));
         var (name, keyHex) = CarKeys.Load().LastOrDefault();
@@ -113,6 +113,25 @@ public static class DriveTest
             await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "0", TimeSpan.FromSeconds(3), "the car to report stopped after key up");
             Console.WriteLine($"PASS key up: car reports stopped after {sw.ElapsedMilliseconds} ms");
 
+            if (carHttp != null)
+            {
+                // Lights: every press of the button selects the next pattern on the car (read back from /status).
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+                for (int press = 0; press < 7; press++)
+                {
+                    await ClickAsync(cdp, "[data-test=btn-lights]");
+                    string want = (await EvalAsync(cdp, Deep("[data-test=btn-lights]") + ".getAttribute('data-mode')")).GetValue<string>();
+                    string got = "";
+                    for (int i = 0; i < 15 && got != want; i++)
+                    {
+                        await Task.Delay(400);
+                        got = JsonNode.Parse(await http.GetStringAsync(carHttp.TrimEnd('/') + "/status"))!["lights"]!["mode"]!.ToString();
+                    }
+                    if (got != want) throw new Exception($"FAIL lights: the app selected mode {want}, the car runs {got}");
+                }
+                Console.WriteLine("PASS lights: all 7 patterns selected on the car in turn");
+            }
+
             // Settings: the panel loads the car's values, a wheel test spins a wheel, a change is stored by the car.
             await ClickAsync(cdp, "[data-test=btn-settings]");
             await WaitForAsync(cdp, "[data-test=set-camera-size]", TimeSpan.FromSeconds(10), "the settings panel with the car's values");
@@ -120,7 +139,7 @@ public static class DriveTest
             if (carHttp != null)
             {
                 // The panel must show what the car actually has (a select once showed its first option instead).
-                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
                 string carSize = JsonNode.Parse(await http.GetStringAsync(carHttp.TrimEnd('/') + "/status"))!["settings"]!["camera.size"]!.GetValue<string>();
                 if (carSize != camSize) throw new Exception($"FAIL settings panel shows camera size {camSize}, the car has {carSize}");
             }
@@ -136,6 +155,20 @@ public static class DriveTest
             Console.WriteLine($"PASS setting stored by the car (camera.size {camSize} -> {other})");
             await EvalAsync(cdp, "(()=>{const s=" + Deep("[data-test=set-camera-size]") + ";s.value='" + camSize + "';s.dispatchEvent(new Event('change',{bubbles:true}));return true;})()");
             await WaitForTextAsync(cdp, "[data-test=settings-reply]", "saved camera.size=" + camSize, "the car to restore the picture size");
+
+            if (calibrateLights)
+            {
+                // Light corners: four groups, answered front-left, front-right, rear-left, rear-right. NOTE: this stores
+                // those answers on the car; restore the real layout afterwards (Settings > Lights).
+                await ClickAsync(cdp, "[data-test=lights-calibrate]");
+                for (int group = 0; group < 4; group++)
+                {
+                    await WaitForTextAsync(cdp, "[data-test=lights-cal-step]", $"Group {group + 1} of 4", $"calibration step {group + 1}");
+                    await ClickAsync(cdp, $"[data-test=corner-{group}]");
+                }
+                await WaitForTextAsync(cdp, "[data-test=settings-reply]", "saved led.corners=000111222333", "the car to store the light corners");
+                Console.WriteLine("PASS light corner calibration stored on the car (000111222333)");
+            }
             await ClickAsync(cdp, "[data-test=btn-settings]");
 
             // Reconnect: restart the car's program over USB (looks like a car restart to the app) and expect the page to
@@ -162,7 +195,7 @@ public static class DriveTest
                 // The car's own counters for this session (retransmissions, abandoned video chunks, FORWARD-TSN).
                 try
                 {
-                    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
                     var link = JsonNode.Parse(await http.GetStringAsync(carHttp.TrimEnd('/') + "/status"))!["link"]!;
                     Console.WriteLine($"  car link: retransmits {link["sctpRetransmits"]}, abandoned {link["sctpAbandoned"]}, FORWARD-TSN {link["sctpForwardTsn"]}, " +
                                       $"peer supports FORWARD-TSN {link["peerForwardTsn"]}, test-dropped {link["testDropped"]}, unprotected {link["sctpUnprotected"]}");

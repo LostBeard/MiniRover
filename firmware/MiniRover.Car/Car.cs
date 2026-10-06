@@ -29,6 +29,8 @@ namespace MiniRover.Car
         public string Faults = "";
         /// <summary>A battery pack was detected at boot (false = USB power only).</summary>
         public bool HasBattery;
+        /// <summary>Pack voltage measured at boot, before anything drew current (shown even when the motor board failed).</summary>
+        public double BootVolts;
         public uint LastIrCode;
         /// <summary>Camera sensor id (MiniRover.Native.Camera.Sensor*), 0 when no camera answered.</summary>
         public int CameraSensor;
@@ -54,6 +56,7 @@ namespace MiniRover.Car
                     int sum = 0;
                     for (int i = 0; i < 8; i++) sum += ch.ReadValue();
                     double volts = sum / 8 / 4095.0 * BatteryService.AdcFullScaleVolts * Settings.BatteryCoefficient;
+                    BootVolts = volts;
                     HasBattery = volts >= BatteryService.NoBatteryVolts;
                     System.Diagnostics.Debug.WriteLine("Boot battery " + volts.ToString("F2") + " V" + (HasBattery ? "" : " - USB power only, servos stay off"));
                 }
@@ -75,6 +78,7 @@ namespace MiniRover.Car
                 // (lights blinking, servos clicking). BatteryService centres them once a pack appears.
                 if (HasBattery) Servos.CenterBoth();
             });
+            if (SharedI2c.RecoveryNote.Length > 0) System.Diagnostics.Debug.WriteLine(SharedI2c.RecoveryNote);
             Try("leds", () =>
             {
                 Leds = new Gpio32(adc) { Brightness = Settings.LedBrightness };
@@ -110,7 +114,12 @@ namespace MiniRover.Car
                     Try("battery", () => Battery.Start());
                 }
             }
+            if (Leds != null) Lights = new LightsService(this); // started by Program after the greeting
         }
+
+        /// <summary>Light patterns over <see cref="Leds"/> (null without LEDs). Everything that colours the LEDs goes
+        /// through it, so its animation thread never fights another writer.</summary>
+        public LightsService Lights;
 
         void Try(string part, Action init)
         {

@@ -53,10 +53,11 @@ Changed through `/settings` (HTTP), the BLE setup service, or the app link. Valu
 | `battery.coef` | 3.7 | 2.5..5.5, calibrate against a multimeter (see [battery.md](battery.md)) |
 | `led.brightness` | 64 | 0..255 |
 | `camera.size` | 6 | esp32-camera frame size: 1 = 160x120, 6 = 320x240, 8 = 400x296, 9 = 480x320, 10 = 640x480, 11 = 800x600 (OV2640 only) |
-| `camera.quality` | 12 | JPEG quality 4..63, lower is better and bigger |
+| `camera.quality` | 12 | JPEG quality 8..63, lower is better and bigger |
 | `camera.fps` | 15 | 1..30 |
 | `camera.flip`, `camera.mirror` | 1, 1 | the head holds the sensor upside down; both 1 = upright (see [hardware.md](hardware.md)) |
 | `http.api` | 0 | 1 turns on the HTTP test API above |
+| `led.corners` | `------------` | which corner each of the 12 LEDs is on (0 front left, 1 front right, 2 rear left, 3 rear right, - unknown); set by the app's light calibration |
 
 ## Serial / debug
 

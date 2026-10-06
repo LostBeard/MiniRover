@@ -34,7 +34,8 @@ if (args.Length >= 2 && args[0] == "drivetest")
         args.Length > 4 && !args[4].StartsWith("--") ? args[4] : Path.Combine(Path.GetTempPath(), "minirover-drivetest-shots"),
         args.SkipWhile(a => a != "--reboot").Skip(1).FirstOrDefault(),
         int.TryParse(args.SkipWhile(a => a != "--loss").Skip(1).FirstOrDefault(), out int lossArg) ? lossArg : 0,
-        args.SkipWhile(a => a != "--car").Skip(1).FirstOrDefault());
+        args.SkipWhile(a => a != "--car").Skip(1).FirstOrDefault(),
+        args.Contains("--calibrate-lights"));
 }
 
 // minirover webtest <publish wwwroot> <COMx> [httpPort] [cdpPort] [screenshotDir]

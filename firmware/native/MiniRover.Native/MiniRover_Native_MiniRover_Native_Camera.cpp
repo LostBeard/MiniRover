@@ -52,6 +52,7 @@ static volatile bool s_ready = false;
 static volatile bool s_softJpeg = false;    // GC0308: encode in software
 static volatile int s_quality = 12;         // 0..63 sensor scale (lower = better)
 static volatile int s_sensor = 0;
+static framesize_t s_maxSize = FRAMESIZE_SVGA; // the frame buffers were allocated for this size (see Init)
 
 static volatile int s_handle = -1;
 static volatile int s_sid = -1;
@@ -198,13 +199,20 @@ signed int Camera::Init(signed int param0, signed int param1, HRESULT &hr)
         return Configure(param0, param1, hr) ? s_sensor : -1;
     }
 
+    // esp32-camera sizes its frame buffers for the frame size given at init, and set_framesize never grows them:
+    // a larger size later overruns the buffers (the car restarted while a test switched 320x240 -> 400x296 while
+    // streaming). So JPEG sensors start at the largest size we allow (JPEG buffers are width*height/5: 96 KB each at
+    // 800x600, in PSRAM) and step down; the size is never raised above what the buffers were made for.
     s_softJpeg = false;
-    esp_err_t err = cam_start(PIXFORMAT_JPEG, size, quality);
+    s_maxSize = FRAMESIZE_SVGA;
+    esp_err_t err = cam_start(PIXFORMAT_JPEG, FRAMESIZE_SVGA, quality);
     if (err == ESP_ERR_NOT_SUPPORTED)
     {
-        // Sensor without a JPEG encoder (GC0308): capture YUV422 and encode in the task.
+        // Sensor without a JPEG encoder (GC0308): capture YUV422 and encode in the task. Raw YUV buffers are
+        // width*height*2 (600 KB at 640x480), too big to start large, so its size can only go down from here.
         esp_camera_deinit();
         if (size > FRAMESIZE_VGA) size = FRAMESIZE_VGA;
+        s_maxSize = size;
         err = cam_start(PIXFORMAT_YUV422, size, quality);
         s_softJpeg = err == ESP_OK;
     }
@@ -217,6 +225,10 @@ signed int Camera::Init(signed int param0, signed int param1, HRESULT &hr)
     sensor_t *s = esp_camera_sensor_get();
     s_sensor = s != NULL ? s->id.PID : 0;
     s_quality = quality;
+    if (!s_softJpeg && s != NULL && s->set_framesize != NULL && size < s_maxSize)
+    {
+        s->set_framesize(s, size); // step down to the requested size
+    }
 
     if (s_task == NULL &&
         xTaskCreatePinnedToCore(cam_task, "mr_camera", 6144, NULL, 4, &s_task, tskNO_AFFINITY) != pdPASS)
@@ -246,7 +258,7 @@ bool Camera::Configure(signed int param0, signed int param1, HRESULT &hr)
     }
     int quality = param1 < 0 ? 0 : (param1 > 63 ? 63 : param1);
     framesize_t size = (framesize_t)param0;
-    if (s_softJpeg && size > FRAMESIZE_VGA) size = FRAMESIZE_VGA;
+    if (size > s_maxSize) size = s_maxSize; // never beyond the frame buffers (see Init)
     bool ok = true;
     if (!s_softJpeg && s->set_quality != NULL) ok = s->set_quality(s, quality) == 0;
     s_quality = quality;

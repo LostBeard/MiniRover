@@ -91,9 +91,16 @@ namespace MiniRover.Car
                     Need(_car.Leds, "leds");
                     if (r.Get("brightness") != null) _car.Leds.Brightness = (int)r.GetDouble("brightness", 64);
                     byte red = (byte)r.GetDouble("r", 0), green = (byte)r.GetDouble("g", 0), blue = (byte)r.GetDouble("b", 0);
-                    if (r.Get("i") != null) _car.Leds.SetPixel((int)r.GetDouble("i", 0), red, green, blue);
-                    else _car.Leds.Fill(red, green, blue);
-                    _car.Leds.Show();
+                    if (r.Get("mode") != null && _car.Lights != null)
+                    {
+                        _car.Lights.Set((int)r.GetDouble("mode", 1), red, green, blue, (int)r.GetDouble("param", 0));
+                    }
+                    else if (r.Get("i") != null)
+                    {
+                        // One LED for wiring tests: stop the patterns so they do not paint over it.
+                        if (_car.Lights != null) _car.Lights.Set(LightsService.ModeIdentify, 0, 0, 0, 100 + (int)r.GetDouble("i", 0));
+                    }
+                    else if (_car.Lights != null) _car.Lights.Set(LightsService.ModeSolid, red, green, blue, 0);
                     Ok(c);
                     return;
                 case "/matrix":
@@ -261,6 +268,9 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
                   .Append("\",\"ageS\":").Append(((Environment.TickCount64 - _car.LastIrMs) / 1000).ToString()).Append('}');
             }
             Settings s = _car.Settings;
+            if (_car.Lights != null) sb.Append(",\"lights\":{\"mode\":").Append(_car.Lights.Mode.ToString()).Append('}');
+            sb.Append(",\"bootVolts\":").Append(_car.BootVolts.ToString("F2"));
+            sb.Append(",\"i2cRecovery\":\"").Append(JsonEscape(MiniRover.Car.Drivers.SharedI2c.RecoveryNote)).Append('"');
             // Every client setting, as the strings the app link reports (Settings.ValueOf), so tools can compare.
             sb.Append(",\"settings\":{");
             for (int i = 0; i < Settings.ClientKeys.Length; i++)

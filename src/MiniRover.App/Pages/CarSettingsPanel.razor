@@ -92,6 +92,27 @@
             <label>Brightness: @_s.Get("led.brightness")
                 <UiSlider Min="8" Max="255" Step="1" Value="@_s.GetDouble("led.brightness", 64)" ValueChanged="@(v => Queue("led.brightness", v))" />
             </label>
+            <p class="mr-muted">Headlights, brake lights and turn signals need to know which corner each light is on
+               (@(CornersKnown ? "done" : "not set yet")).</p>
+            @if (_calStep < 0)
+            {
+                <div class="mr-row">
+                    <UiButton Secondary="true" OnClick="@(() => StartCalibration(false))" data-test="lights-calibrate">Find the corners</UiButton>
+                    <UiButton Secondary="true" OnClick="@(() => StartCalibration(true))">One light at a time</UiButton>
+                </div>
+            }
+            else
+            {
+                <p data-test="lights-cal-step">@(_calSingle ? $"Light {_calStep + 1} of 12" : $"Group {_calStep + 1} of 4") is lit white. Which corner of the car is it on?</p>
+                <div class="mr-corners">
+                    <UiButton OnClick="@(() => Answer('0'))" data-test="corner-0">Front left</UiButton>
+                    <UiButton OnClick="@(() => Answer('1'))" data-test="corner-1">Front right</UiButton>
+                    <UiButton OnClick="@(() => Answer('2'))" data-test="corner-2">Rear left</UiButton>
+                    <UiButton OnClick="@(() => Answer('3'))" data-test="corner-3">Rear right</UiButton>
+                </div>
+                <p class="mr-muted">If the lit lights are on more than one corner, cancel and use "One light at a time".</p>
+                <UiButton Secondary="true" OnClick="CancelCalibration">Cancel</UiButton>
+            }
         </section>
 
         <section>
@@ -187,6 +208,48 @@
         change(Car);
         Cars.Save(Car);
         await OnLocalChanged.InvokeAsync();
+    }
+
+    // ---- light corner calibration: the car lights one group (or one LED), the driver says which corner ----
+    int _calStep = -1;
+    bool _calSingle;
+    readonly char[] _corners = "------------".ToCharArray();
+
+    bool CornersKnown => _s != null && _s.Get("led.corners").Length == 12 && !_s.Get("led.corners").Contains('-');
+
+    void StartCalibration(bool single)
+    {
+        _calSingle = single;
+        _calStep = 0;
+        Array.Fill(_corners, '-');
+        LightStep();
+    }
+
+    void LightStep()
+    {
+        try { Link.Lights(MiniRover.Protocol.CarLink.LightsIdentify, param: _calSingle ? 100 + _calStep : _calStep); }
+        catch (InvalidOperationException) { _lastReply = "Not connected."; _calStep = -1; }
+    }
+
+    void Answer(char corner)
+    {
+        if (_calSingle) _corners[_calStep] = corner;
+        else for (int i = _calStep * 3; i < _calStep * 3 + 3; i++) _corners[i] = corner;
+        _calStep++;
+        if (_calStep < (_calSingle ? 12 : 4))
+        {
+            LightStep();
+            return;
+        }
+        _calStep = -1;
+        Send("led.corners", new string(_corners));
+        try { Link.Lights(MiniRover.Protocol.CarLink.LightsHeadlights); } catch (InvalidOperationException) { }
+    }
+
+    void CancelCalibration()
+    {
+        _calStep = -1;
+        try { Link.Lights(MiniRover.Protocol.CarLink.LightsSolid, 40, 40, 40); } catch (InvalidOperationException) { }
     }
 
     void TestWheel(int motor)

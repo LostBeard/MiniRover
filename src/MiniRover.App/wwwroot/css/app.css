@@ -82,3 +82,4 @@ html, body {
 .mr-wheel { display: grid; grid-template-columns: 6.5rem auto auto; gap: 0.25rem 0.75rem; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--mr-border); }
 .mr-wheel-name { font-weight: 600; }
 .mr-wheel-gain { grid-column: 1 / -1; margin: 0 !important; }
+.mr-corners { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 0.5rem 0; }

@@ -49,7 +49,7 @@
         <Stick Label="Drive" TestId="stick-drive" OnMove="OnDriveStick" />
         <div class="mr-buttons">
             <UiButton OnClick="Horn" data-test="btn-horn">Horn</UiButton>
-            <UiButton Secondary="@(!_lights)" OnClick="ToggleLights" data-test="btn-lights">Lights</UiButton>
+            <UiButton Secondary="@(_lightsIndex == 0)" OnClick="ToggleLights" data-test="btn-lights" data-mode="@LightModes[_lightsIndex].Mode">Lights: @LightModes[_lightsIndex].Name</UiButton>
             <UiButton Secondary="true" OnClick="CenterCamera" data-test="btn-center">Center camera</UiButton>
             <UiButton Secondary="true" OnClick="CycleSpeed" data-test="btn-speed">Speed: @SpeedName</UiButton>
             <UiButton Secondary="@(!_showSettings)" OnClick="@(() => _showSettings = !_showSettings)" data-test="btn-settings">Settings</UiButton>
@@ -79,7 +79,7 @@
     SpawnDev.RTC.IRTCDataChannel? _video;
     string _state = "connecting", _status = "connecting...";
     int _rate = -1, _frames; // -1 until the first full second has been counted
-    bool _lights, _wasDriving;
+    bool _wasDriving;
 
     // input state
     (double X, double Y) _touch;
@@ -216,7 +216,7 @@
                 _link.Video(true); // the car's saved size / quality / fps
                 ApplyTestHooks();
                 _sentPan = _sentTilt = -1; // resend the camera aim to a car that may have restarted
-                if (_lights) _link.Leds(255, 255, 255);
+                if (_lightsIndex != 0) ApplyLights(); // a restarted car comes back with its default lights
                 StateHasChanged();
                 await ControlLoop();
             }
@@ -419,14 +419,26 @@
 
     void Horn() { if (_link?.IsConnected == true) _link.Buzzer(2000, 250); }
 
+    // The car animates these itself (LightsService). Headlights add brake lights and turn signals once the corners
+    // are calibrated (Settings).
+    static readonly (string Name, int Mode)[] LightModes =
+    [
+        ("dim", CarLink.LightsSolid), ("headlights", CarLink.LightsHeadlights), ("hazard", CarLink.LightsHazard),
+        ("police", CarLink.LightsPolice), ("rainbow", CarLink.LightsRainbow), ("battery", CarLink.LightsBattery),
+        ("off", CarLink.LightsOff),
+    ];
+    int _lightsIndex;
+
     void ToggleLights()
     {
-        _lights = !_lights;
-        if (_link?.IsConnected == true)
-        {
-            if (_lights) _link.Leds(255, 255, 255);
-            else _link.Leds(40, 40, 40);
-        }
+        _lightsIndex = (_lightsIndex + 1) % LightModes.Length;
+        ApplyLights();
+    }
+
+    void ApplyLights()
+    {
+        if (_link?.IsConnected != true) return;
+        try { _link.Lights(LightModes[_lightsIndex].Mode, 40, 40, 40); } catch (InvalidOperationException) { }
     }
 
     void CenterCamera() { _pan = 90; _tilt = 90; }

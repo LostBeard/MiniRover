@@ -195,6 +195,7 @@ static class LinkCommand
                     Console.WriteLine($"  {telemetryCount - t0} telemetry in {ms} ms while driving at 20 Hz, longest gap {maxTelemetryGapMs} ms, 'moving' seen in {moving} of {ms / 50} samples");
                     break;
                 }
+                case "lights": link.Lights(int.Parse(p[1]), 40, 40, 40, p.Length > 2 ? int.Parse(p[2]) : 0); break;
                 case "videoon": link.Video(true); break;
                 case "videooff": link.Video(false); break;
                 case "stop": link.Stop(); break;

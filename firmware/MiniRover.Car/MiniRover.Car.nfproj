@@ -32,6 +32,7 @@
     <Compile Include="DriveService.cs" />
     <Compile Include="Eyes.cs" />
     <Compile Include="HttpServer.cs" />
+    <Compile Include="LightsService.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="WebApi.cs" />

@@ -48,6 +48,13 @@ namespace MiniRover.Car
         public bool CameraMirror { get => GetDouble("camera.mirror", 1) != 0; set => Set("camera.mirror", value ? 1 : 0); }
         public bool CameraFlip { get => GetDouble("camera.flip", 1) != 0; set => Set("camera.flip", value ? 1 : 0); }
 
+        /// <summary>
+        /// Which corner each of the 12 LEDs sits on, one character per LED: 0 front left, 1 front right, 2 rear left,
+        /// 3 rear right, '-' unknown. Filled in by the app's light calibration; the order is not documented, so it is
+        /// never guessed. Headlights, brake lights and turn signals need it.
+        /// </summary>
+        public string LedCorners { get => GetString("led.corners", "------------"); set => SetString("led.corners", value); }
+
         /// <summary>The local HTTP test API (curl drive/servo/led routes). Off by default: HTTP on the LAN is not paired.</summary>
         public bool HttpApi { get => GetDouble("http.api", 0) != 0; set => Set("http.api", value ? 1 : 0); }
 
@@ -68,6 +75,7 @@ namespace MiniRover.Car
                 case "camera.mirror": return CameraMirror ? "1" : "0";
                 case "camera.flip": return CameraFlip ? "1" : "0";
                 case "http.api": return HttpApi ? "1" : "0";
+                case "led.corners": return LedCorners;
             }
             if (key.Length >= 11 && key.StartsWith("motor") && key[5] >= '0' && key[5] <= '3')
             {
@@ -95,7 +103,7 @@ namespace MiniRover.Car
         public static readonly string[] ClientKeys =
         {
             "pan.trim", "tilt.trim", "battery.coef", "drive.limit", "motor.minduty", "led.brightness",
-            "camera.size", "camera.quality", "camera.fps", "camera.mirror", "camera.flip", "http.api",
+            "camera.size", "camera.quality", "camera.fps", "camera.mirror", "camera.flip", "http.api", "led.corners",
             "motor0.invert", "motor1.invert", "motor2.invert", "motor3.invert",
             "motor0.gain", "motor1.gain", "motor2.gain", "motor3.gain",
         };
@@ -110,6 +118,15 @@ namespace MiniRover.Car
             int eq = kv == null ? -1 : kv.IndexOf('=');
             if (eq <= 0) return false;
             string key = kv.Substring(0, eq).Trim();
+            if (key == "led.corners")
+            {
+                // Text, not a number: 12 characters from "0123-" (see LedCorners).
+                string corners = kv.Substring(eq + 1).Trim();
+                if (corners.Length != 12) return false;
+                for (int i = 0; i < corners.Length; i++) if ("0123-".IndexOf(corners[i]) < 0) return false;
+                LedCorners = corners;
+                return true;
+            }
             double v;
             try { v = double.Parse(kv.Substring(eq + 1).Trim()); } catch { return false; }
             switch (key)
@@ -121,7 +138,7 @@ namespace MiniRover.Car
                 case "motor.minduty": MotorMinimumDuty = (int)Clamp(v, 0, 4000); return true;
                 case "led.brightness": LedBrightness = (int)Clamp(v, 0, 255); return true;
                 case "camera.size": CameraSize = (int)Clamp(v, 1, 11); return true;
-                case "camera.quality": CameraQuality = (int)Clamp(v, 4, 63); return true;
+                case "camera.quality": CameraQuality = (int)Clamp(v, 8, 63); return true; // below 8 a frame can outgrow the camera buffers
                 case "camera.fps": CameraMaxFps = (int)Clamp(v, 1, 30); return true;
                 case "camera.mirror": CameraMirror = v != 0; return true;
                 case "camera.flip": CameraFlip = v != 0; return true;

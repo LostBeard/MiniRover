@@ -24,11 +24,12 @@ namespace MiniRover.Car
             Step(car, "greeting", () =>
             {
                 if (car.Matrix != null) car.Matrix.Show(car.HasBattery ? Eyes.Open : Eyes.Closed);
-                if (car.Leds != null && car.HasBattery)
+                if (car.Lights != null)
                 {
-                    // Dim white headlights so a powered car is obvious. Not on USB power alone (brownout).
-                    car.Leds.Fill(40, 40, 40);
-                    car.Leds.Show();
+                    // Dim white so a powered car is obvious. Off on USB power alone (brownout).
+                    if (car.HasBattery) car.Lights.Set(LightsService.ModeSolid, 40, 40, 40, 0);
+                    else car.Lights.Set(LightsService.ModeOff, 0, 0, 0, 0);
+                    car.Lights.Start();
                 }
                 if (car.Buzzer != null) car.Buzzer.Play(new int[] { 1568, 70, 0, 30, 2093, 90 });
             });

@@ -41,6 +41,10 @@ namespace MiniRover.Car
 
         public bool Moving => _motors.AnyRunning;
 
+        /// <summary>The wheel speeds last set by <see cref="Drive"/> (-1..1, after limits), 0 when stopped.</summary>
+        public double LastLeft => _sidesSet ? _lastLeft : 0;
+        public double LastRight => _sidesSet ? _lastRight : 0;
+
         public void Start()
         {
             _watchdog = new Thread(WatchdogLoop);

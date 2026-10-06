@@ -216,6 +216,9 @@ public sealed class CarConnection : IAsyncDisposable
 
     public void Leds(byte r, byte g, byte b) => Send([CarLink.MsgLeds, r, g, b]);
 
+    /// <summary>A light pattern animated on the car (CarLink.Lights* modes); the colour is for LightsSolid.</summary>
+    public void Lights(int mode, byte r = 0, byte g = 0, byte b = 0, int param = 0) => Send(CarLink.EncodeLights(mode, r, g, b, param));
+
     public void Buzzer(int hz, int ms) => Send([CarLink.MsgBuzzer, (byte)hz, (byte)(hz >> 8), (byte)ms, (byte)(ms >> 8)]);
 
     /// <summary>A 16-byte eye frame: 8 rows per eye, bit 7 = leftmost pixel.</summary>

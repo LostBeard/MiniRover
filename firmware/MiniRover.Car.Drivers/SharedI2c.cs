@@ -13,10 +13,53 @@ namespace MiniRover.Car.Drivers
         public static readonly object Lock = new object();
         static bool s_pinsConfigured;
 
+        /// <summary>What <see cref="RecoverBus"/> found at boot ("" = bus idle), for diagnostics.</summary>
+        public static string RecoveryNote = "";
+
+        /// <summary>
+        /// I2C bus recovery (the standard 9-clock method). A slave interrupted mid-transfer (the ESP32 restarted, or a
+        /// power dip) can keep holding SDA low; resetting the ESP32 does not reset it, and every later transfer on the
+        /// bus fails. Clocking SCL until the slave lets SDA go, then sending a STOP, frees it. Runs on the raw pins, so
+        /// only before they are handed to the I2C driver.
+        /// </summary>
+        static void RecoverBus()
+        {
+            using (var gpio = new System.Device.Gpio.GpioController())
+            {
+                var sda = gpio.OpenPin(BoardPins.I2cSda, System.Device.Gpio.PinMode.InputPullUp);
+                if (sda.Read() == System.Device.Gpio.PinValue.High)
+                {
+                    gpio.ClosePin(BoardPins.I2cSda);
+                    return; // idle bus: nothing to do
+                }
+                var scl = gpio.OpenPin(BoardPins.I2cScl, System.Device.Gpio.PinMode.Output);
+                int clocks = 0;
+                for (; clocks < 9 && sda.Read() == System.Device.Gpio.PinValue.Low; clocks++)
+                {
+                    scl.Write(System.Device.Gpio.PinValue.Low);
+                    System.Threading.Thread.Sleep(1);
+                    scl.Write(System.Device.Gpio.PinValue.High);
+                    System.Threading.Thread.Sleep(1);
+                }
+                bool freed = sda.Read() == System.Device.Gpio.PinValue.High;
+                // STOP: SDA low -> high while SCL is high.
+                gpio.ClosePin(BoardPins.I2cSda);
+                sda = gpio.OpenPin(BoardPins.I2cSda, System.Device.Gpio.PinMode.Output);
+                sda.Write(System.Device.Gpio.PinValue.Low);
+                System.Threading.Thread.Sleep(1);
+                sda.Write(System.Device.Gpio.PinValue.High);
+                gpio.ClosePin(BoardPins.I2cSda);
+                gpio.ClosePin(BoardPins.I2cScl);
+                RecoveryNote = freed ? "I2C bus was held by a device; freed after " + clocks + " clocks"
+                                     : "I2C data line stays low after 9 clocks (board unpowered or a short?)";
+            }
+        }
+
         public static I2cDevice Open(int address)
         {
             if (!s_pinsConfigured)
             {
+                try { RecoverBus(); } catch (Exception ex) { RecoveryNote = "I2C recovery skipped: " + ex.Message; }
                 Configuration.SetPinFunction(BoardPins.I2cSda, DeviceFunction.I2C1_DATA);
                 Configuration.SetPinFunction(BoardPins.I2cScl, DeviceFunction.I2C1_CLOCK);
                 s_pinsConfigured = true;

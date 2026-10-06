@@ -343,8 +343,7 @@ namespace MiniRover.Car
                 case BleSetup.OpLeds:
                     if (f.Length < 4) { SendError("bad LED frame"); return; }
                     if (_car.Leds == null) { SendError("LEDs not available: " + _car.Faults); return; }
-                    _car.Leds.Fill(f[1], f[2], f[3]);
-                    _car.Leds.Show();
+                    if (_car.Lights != null) _car.Lights.Set(LightsService.ModeSolid, f[1], f[2], f[3], 0);
                     break;
 
                 case BleSetup.OpBuzzer:
