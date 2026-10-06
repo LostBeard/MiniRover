@@ -15,6 +15,8 @@ static const CLR_RT_MethodHandler method_lookup[] =
     Library_MiniRover_Native_MiniRover_Native_Board::WifiRssi___STATIC__I4,
     Library_MiniRover_Native_MiniRover_Native_Board::SetWifiPowerSave___STATIC__BOOLEAN__BOOLEAN,
     Library_MiniRover_Native_MiniRover_Native_Board::FreeMemory___STATIC__I4__I4,
+    Library_MiniRover_Native_MiniRover_Native_Board::ResetReason___STATIC__I4,
+    Library_MiniRover_Native_MiniRover_Native_Board::FullReset___STATIC__VOID,
     Library_MiniRover_Native_MiniRover_Native_Camera::Init___STATIC__I4__I4__I4,
     Library_MiniRover_Native_MiniRover_Native_Camera::Stream___STATIC__VOID__I4__I4__I4,
     Library_MiniRover_Native_MiniRover_Native_Camera::Configure___STATIC__BOOLEAN__I4__I4,
@@ -25,7 +27,7 @@ static const CLR_RT_MethodHandler method_lookup[] =
 const CLR_RT_NativeAssemblyData g_CLR_AssemblyNative_MiniRover_Native =
 {
     "MiniRover.Native",
-    0xE9C1DBF0,
+    0x25B09AE7,
     method_lookup,
     { 1, 0, 0, 0 }
 };

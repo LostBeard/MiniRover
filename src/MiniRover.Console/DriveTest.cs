@@ -17,7 +17,11 @@ public static class DriveTest
 {
     public static async Task<int> RunAsync(string webRoot, int httpPort, int cdpPort, string shotDir, string? rebootPort = null, int lossPermille = 0, string? carHttp = null, bool calibrateLights = false)
     {
-        if (!File.Exists(Path.Combine(webRoot, "index.html"))) throw new FileNotFoundException("publish the app first", Path.Combine(webRoot, "index.html"));
+        // webRoot: a published wwwroot (served here on localhost) or the URL of a hosted copy (e.g. GitHub Pages).
+        bool hosted = webRoot.StartsWith("http://") || webRoot.StartsWith("https://");
+        string appUrl = hosted ? (webRoot.EndsWith("/") ? webRoot : webRoot + "/") : $"http://localhost:{httpPort}/";
+        string appOrigin = new Uri(appUrl).GetLeftPart(UriPartial.Authority);
+        if (!hosted && !File.Exists(Path.Combine(webRoot, "index.html"))) throw new FileNotFoundException("publish the app first", Path.Combine(webRoot, "index.html"));
         var (name, keyHex) = CarKeys.Load().LastOrDefault();
         if (keyHex == null) { Console.Error.WriteLine("No pairing key: run `minirover setup --pairing` first."); return 2; }
         // A busy port means someone else's server or browser (a teammate's Chrome once got driven by mistake).
@@ -27,7 +31,7 @@ public static class DriveTest
         }
         Directory.CreateDirectory(shotDir);
 
-        using var server = StaticServer.Start(webRoot, httpPort);
+        using var server = hosted ? null : StaticServer.Start(webRoot, httpPort);
         string profile = Path.Combine(Path.GetTempPath(), "minirover-drivetest-chrome");
         if (Directory.Exists(profile)) Directory.Delete(profile, true);
         using Process chrome = Process.Start(new ProcessStartInfo
@@ -45,9 +49,10 @@ public static class DriveTest
             await cdp.SendAsync("Page.enable");
             await cdp.SendAsync("Emulation.setTouchEmulationEnabled", new JsonObject { ["enabled"] = true, ["maxTouchPoints"] = 2 });
             var car = new JsonArray(new JsonObject { ["Name"] = name, ["RoomKeyHex"] = keyHex, ["LastIp"] = "", ["Firmware"] = "test", ["PairedUtc"] = DateTime.UtcNow.ToString("o") });
-            string seed = $"if (location.origin === 'http://localhost:{httpPort}') localStorage.setItem('minirover.cars.v1', {JsonSerializer.Serialize(car.ToJsonString())});";
+            string seed = $"if (location.origin === '{appOrigin}') localStorage.setItem('minirover.cars.v1', {JsonSerializer.Serialize(car.ToJsonString())});";
             await cdp.SendAsync("Page.addScriptToEvaluateOnNewDocument", new JsonObject { ["source"] = seed });
-            await cdp.SendAsync("Page.navigate", new JsonObject { ["url"] = $"http://localhost:{httpPort}/" + (lossPermille > 0 ? $"?testloss={lossPermille}" : "") });
+            await cdp.SendAsync("Page.navigate", new JsonObject { ["url"] = appUrl + (lossPermille > 0 ? $"?testloss={lossPermille}" : "") });
+            if (hosted) Console.WriteLine("testing the hosted app at " + appUrl);
             if (lossPermille > 0) Console.WriteLine($"loss test: the car drops {lossPermille / 10.0:F1}% of the datagrams it sends");
 
             await WaitForAsync(cdp, "[data-test=garage-drive]", TimeSpan.FromSeconds(60), "the garage with a Drive button");

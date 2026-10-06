@@ -270,6 +270,8 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
             Settings s = _car.Settings;
             if (_car.Lights != null) sb.Append(",\"lights\":{\"mode\":").Append(_car.Lights.Mode.ToString()).Append('}');
             sb.Append(",\"bootVolts\":").Append(_car.BootVolts.ToString("F2"));
+            sb.Append(",\"resetReason\":\"").Append(Program.ResetReasonName(MiniRover.Native.Board.ResetReason())).Append('"');
+            sb.Append(",\"lastAbnormalReset\":\"").Append(JsonEscape(_car.Settings.LastAbnormalReset)).Append('"');
             sb.Append(",\"i2cRecovery\":\"").Append(JsonEscape(MiniRover.Car.Drivers.SharedI2c.RecoveryNote)).Append('"');
             // Every client setting, as the strings the app link reports (Settings.ValueOf), so tools can compare.
             sb.Append(",\"settings\":{");

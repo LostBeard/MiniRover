@@ -31,5 +31,31 @@ namespace MiniRover.Native
         /// <summary>Native heap numbers in bytes (Mem* ids). Internal RAM is what runs out first on this board.</summary>
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern int FreeMemory(int kind);
+
+        // ResetReason values (ESP-IDF esp_reset_reason_t).
+        public const int ResetUnknown = 0;
+        public const int ResetPowerOn = 1;      // power applied, or the EN pin (reset button, USB auto-reset)
+        public const int ResetExternal = 2;
+        public const int ResetSoftware = 3;     // esp_restart: a deliberate restart
+        public const int ResetPanic = 4;        // a crash
+        public const int ResetInterruptWatchdog = 5;
+        public const int ResetTaskWatchdog = 6;
+        public const int ResetOtherWatchdog = 7;
+        public const int ResetDeepSleep = 8;
+        public const int ResetBrownout = 9;     // the supply dipped (weak batteries under load)
+        public const int ResetSdio = 10;
+
+        /// <summary>Why the chip last started (Reset* values).</summary>
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern int ResetReason();
+
+        /// <summary>
+        /// Restarts the whole chip, RTC domain included (the RTC watchdog's reset-RTC stage). A crash reset keeps
+        /// some state, and the car then found its I2C devices and camera not answering until a reset through the EN
+        /// pin; this is the nearest software equivalent. The next boot reports <see cref="ResetOtherWatchdog"/>.
+        /// Does not return.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern void FullReset();
     }
 }

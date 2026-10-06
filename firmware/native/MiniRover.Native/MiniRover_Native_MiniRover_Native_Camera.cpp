@@ -22,6 +22,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_heap_caps.h"
 
 // From SpawnDev.nanoFramework.WebRTC (spawndev_nf_webrtc.h): declared here so this assembly does not need that
@@ -52,7 +53,12 @@ static volatile bool s_ready = false;
 static volatile bool s_softJpeg = false;    // GC0308: encode in software
 static volatile int s_quality = 12;         // 0..63 sensor scale (lower = better)
 static volatile int s_sensor = 0;
-static framesize_t s_maxSize = FRAMESIZE_SVGA; // the frame buffers were allocated for this size (see Init)
+static framesize_t s_size = FRAMESIZE_QVGA;   // the size the driver was initialised for (its buffers fit this)
+static bool s_hmirror = false, s_vflip = false;
+
+// Held by the capture task around each frame, and by Configure while it re-initialises the driver: the driver is
+// never torn down under a frame in flight. (Changing the size with set_framesize while streaming hung the car.)
+static SemaphoreHandle_t s_camLock = NULL;
 
 static volatile int s_handle = -1;
 static volatile int s_sid = -1;
@@ -110,9 +116,16 @@ static void cam_task(void *arg)
         int fps = s_maxFps > 0 ? s_maxFps : 1;
         nextFrame = now + 1000000 / fps;
 
+        xSemaphoreTake(s_camLock, portMAX_DELAY);
+        if (!s_ready)
+        {
+            xSemaphoreGive(s_camLock); // re-initialising
+            continue;
+        }
         camera_fb_t *fb = esp_camera_fb_get();
         if (fb == NULL)
         {
+            xSemaphoreGive(s_camLock);
             s_errors++;
             vTaskDelay(pdMS_TO_TICKS(20));
             continue;
@@ -124,6 +137,7 @@ static void cam_task(void *arg)
             r = sdnf_webrtc_offer_frame(handle, (uint16_t)sid, fb->buf, fb->len);
             if (r == 1) s_lastBytes = (int)fb->len;
             esp_camera_fb_return(fb);
+            xSemaphoreGive(s_camLock);
         }
         else
         {
@@ -133,6 +147,7 @@ static void cam_task(void *arg)
             bool ok = frame2jpg(fb, soft_quality(s_quality), &jpg, &jpgLen);
             s_encodeMs = (int)((esp_timer_get_time() - t0) / 1000);
             esp_camera_fb_return(fb); // the sensor can fill it again while this frame goes out
+            xSemaphoreGive(s_camLock);
             r = ok ? sdnf_webrtc_offer_frame(handle, (uint16_t)sid, jpg, jpgLen) : -1;
             if (r == 1) s_lastBytes = (int)jpgLen;
             if (!ok) s_errors++;
@@ -186,11 +201,39 @@ static esp_err_t cam_start(pixformat_t format, framesize_t size, int quality)
     return esp_camera_init(&c);
 }
 
+// Starts the driver for one size. The GC0308 has no JPEG encoder: it captures YUV422 and the task encodes.
+static esp_err_t cam_open(framesize_t size, int quality)
+{
+    s_softJpeg = false;
+    esp_err_t err = cam_start(PIXFORMAT_JPEG, size, quality);
+    if (err == ESP_ERR_NOT_SUPPORTED)
+    {
+        esp_camera_deinit();
+        if (size > FRAMESIZE_VGA) size = FRAMESIZE_VGA; // YUV buffers are width*height*2
+        err = cam_start(PIXFORMAT_YUV422, size, quality);
+        s_softJpeg = err == ESP_OK;
+    }
+    if (err != ESP_OK)
+    {
+        esp_camera_deinit();
+        return err;
+    }
+    s_size = size;
+    s_quality = quality;
+    sensor_t *s = esp_camera_sensor_get();
+    if (s != NULL)
+    {
+        // A fresh driver starts unflipped: put the orientation back.
+        if (s->set_hmirror != NULL) s->set_hmirror(s, s_hmirror ? 1 : 0);
+        if (s->set_vflip != NULL) s->set_vflip(s, s_vflip ? 1 : 0);
+    }
+    return ESP_OK;
+}
+
 signed int Camera::Init(signed int param0, signed int param1, HRESULT &hr)
 {
     (void)hr;
     HAL_AddSoftRebootHandler(cam_soft_reboot); // deduped by the HAL
-    framesize_t size = (framesize_t)param0;
     int quality = param1 < 0 ? 0 : (param1 > 63 ? 63 : param1);
 
     if (s_ready)
@@ -198,37 +241,19 @@ signed int Camera::Init(signed int param0, signed int param1, HRESULT &hr)
         // Already running: just apply the settings.
         return Configure(param0, param1, hr) ? s_sensor : -1;
     }
-
-    // esp32-camera sizes its frame buffers for the frame size given at init, and set_framesize never grows them:
-    // a larger size later overruns the buffers (the car restarted while a test switched 320x240 -> 400x296 while
-    // streaming). So JPEG sensors start at the largest size we allow (JPEG buffers are width*height/5: 96 KB each at
-    // 800x600, in PSRAM) and step down; the size is never raised above what the buffers were made for.
-    s_softJpeg = false;
-    s_maxSize = FRAMESIZE_SVGA;
-    esp_err_t err = cam_start(PIXFORMAT_JPEG, FRAMESIZE_SVGA, quality);
-    if (err == ESP_ERR_NOT_SUPPORTED)
+    if (s_camLock == NULL)
     {
-        // Sensor without a JPEG encoder (GC0308): capture YUV422 and encode in the task. Raw YUV buffers are
-        // width*height*2 (600 KB at 640x480), too big to start large, so its size can only go down from here.
-        esp_camera_deinit();
-        if (size > FRAMESIZE_VGA) size = FRAMESIZE_VGA;
-        s_maxSize = size;
-        err = cam_start(PIXFORMAT_YUV422, size, quality);
-        s_softJpeg = err == ESP_OK;
+        s_camLock = xSemaphoreCreateMutex();
+        if (s_camLock == NULL) return -1;
     }
+
+    esp_err_t err = cam_open((framesize_t)param0, quality);
     if (err != ESP_OK)
     {
-        esp_camera_deinit();
         return err > 0 ? -(signed int)err : -1;
     }
-
     sensor_t *s = esp_camera_sensor_get();
     s_sensor = s != NULL ? s->id.PID : 0;
-    s_quality = quality;
-    if (!s_softJpeg && s != NULL && s->set_framesize != NULL && size < s_maxSize)
-    {
-        s->set_framesize(s, size); // step down to the requested size
-    }
 
     if (s_task == NULL &&
         xTaskCreatePinnedToCore(cam_task, "mr_camera", 6144, NULL, 4, &s_task, tskNO_AFFINITY) != pdPASS)
@@ -251,24 +276,46 @@ void Camera::Stream(signed int param0, signed int param1, signed int param2, HRE
 bool Camera::Configure(signed int param0, signed int param1, HRESULT &hr)
 {
     (void)hr;
-    sensor_t *s = esp_camera_sensor_get();
-    if (!s_ready || s == NULL)
+    if (!s_ready && s_sensor == 0)
     {
         return false;
     }
     int quality = param1 < 0 ? 0 : (param1 > 63 ? 63 : param1);
     framesize_t size = (framesize_t)param0;
-    if (size > s_maxSize) size = s_maxSize; // never beyond the frame buffers (see Init)
-    bool ok = true;
-    if (!s_softJpeg && s->set_quality != NULL) ok = s->set_quality(s, quality) == 0;
-    s_quality = quality;
-    if (s->set_framesize != NULL) ok = s->set_framesize(s, size) == 0 && ok;
-    return ok;
+    if (s_softJpeg && size > FRAMESIZE_VGA) size = FRAMESIZE_VGA;
+
+    if (size == s_size)
+    {
+        // Same size: quality is a register write, safe while streaming.
+        sensor_t *s = esp_camera_sensor_get();
+        if (s == NULL) return false;
+        bool ok = s_softJpeg || s->set_quality == NULL || s->set_quality(s, quality) == 0;
+        s_quality = quality;
+        return ok;
+    }
+
+    // A new size: esp32-camera sizes its frame buffers at init, and resizing with set_framesize while streaming
+    // hung the car. Stop the capture task at a frame boundary, restart the driver at the new size, carry on.
+    xSemaphoreTake(s_camLock, portMAX_DELAY);
+    s_ready = false;
+    esp_camera_deinit();
+    esp_err_t err = cam_open(size, quality);
+    if (err != ESP_OK)
+    {
+        // Could not start at the new size: fall back to the old one so the car keeps its video.
+        framesize_t old = s_size;
+        err = cam_open(old, quality);
+    }
+    s_ready = err == ESP_OK;
+    xSemaphoreGive(s_camLock);
+    return s_ready && s_size == size;
 }
 
 void Camera::SetOrientation(bool param0, bool param1, HRESULT &hr)
 {
     (void)hr;
+    s_hmirror = param0; // remembered: a re-initialised driver starts unflipped (see cam_open)
+    s_vflip = param1;
     sensor_t *s = esp_camera_sensor_get();
     if (s == NULL) return;
     if (s->set_hmirror != NULL) s->set_hmirror(s, param0 ? 1 : 0);

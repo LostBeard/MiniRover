@@ -28,6 +28,10 @@ namespace MiniRover_Native
 
             static signed int FreeMemory( signed int param0, HRESULT &hr );
 
+            static signed int ResetReason(  HRESULT &hr );
+
+            static void FullReset(  HRESULT &hr );
+
         };
     }
 }

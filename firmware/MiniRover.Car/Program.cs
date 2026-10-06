@@ -14,6 +14,29 @@ namespace MiniRover.Car
             Settings settings = Settings.Load();
             var car = new Car(settings);
             car.Init();
+
+            // After a crash reset (an interrupt watchdog, measured) the car has come up with its I2C devices and
+            // camera not answering until a reset through the EN pin. The motor board is always fitted, so if it is
+            // missing after such a reset, restart the whole chip including its RTC domain, once: that restart reports
+            // the plain "watchdog" reason, which never repeats this, so it cannot loop.
+            int reason = MiniRover.Native.Board.ResetReason();
+            System.Diagnostics.Debug.WriteLine("Reset reason: " + ResetReasonName(reason));
+            bool selfHealBoot = reason == MiniRover.Native.Board.ResetOtherWatchdog;
+            if (reason != MiniRover.Native.Board.ResetPowerOn && reason != MiniRover.Native.Board.ResetDeepSleep &&
+                reason != MiniRover.Native.Board.ResetSoftware && !selfHealBoot)
+            {
+                // Kept in the settings file: the self-heal below restarts again and would hide the cause.
+                settings.LastAbnormalReset = ResetReasonName(reason) + " at boot " + DateTime.UtcNow.ToString("o")
+                    + ", battery " + car.BootVolts.ToString("F2") + " V";
+                settings.Save();
+            }
+            if (car.Pwm == null && reason != MiniRover.Native.Board.ResetPowerOn && reason != MiniRover.Native.Board.ResetDeepSleep &&
+                !selfHealBoot)
+            {
+                System.Diagnostics.Debug.WriteLine("Motor board not answering after a " + ResetReasonName(reason) + " reset: full restart");
+                Thread.Sleep(200); // let the message out
+                MiniRover.Native.Board.FullReset();
+            }
             if (car.Faults.Length > 0)
             {
                 System.Diagnostics.Debug.WriteLine("Faults: " + car.Faults);
@@ -123,6 +146,23 @@ namespace MiniRover.Car
                     + (MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.MemPsramLargest) / 1024) + ")";
             }
             catch (Exception ex) { return ex.Message; }
+        }
+
+        public static string ResetReasonName(int reason)
+        {
+            switch (reason)
+            {
+                case MiniRover.Native.Board.ResetPowerOn: return "power-on";
+                case MiniRover.Native.Board.ResetExternal: return "external";
+                case MiniRover.Native.Board.ResetSoftware: return "software";
+                case MiniRover.Native.Board.ResetPanic: return "crash";
+                case MiniRover.Native.Board.ResetInterruptWatchdog: return "interrupt watchdog";
+                case MiniRover.Native.Board.ResetTaskWatchdog: return "task watchdog";
+                case MiniRover.Native.Board.ResetOtherWatchdog: return "RTC watchdog (full restart)";
+                case MiniRover.Native.Board.ResetDeepSleep: return "deep-sleep wake";
+                case MiniRover.Native.Board.ResetBrownout: return "brownout";
+                default: return "unknown (" + reason + ")";
+            }
         }
 
         delegate void StepAction();

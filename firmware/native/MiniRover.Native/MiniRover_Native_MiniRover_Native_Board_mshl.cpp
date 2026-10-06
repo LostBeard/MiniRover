@@ -53,3 +53,27 @@ HRESULT Library_MiniRover_Native_MiniRover_Native_Board::FreeMemory___STATIC__I4
     }
     NANOCLR_NOCLEANUP();
 }
+
+HRESULT Library_MiniRover_Native_MiniRover_Native_Board::ResetReason___STATIC__I4( CLR_RT_StackFrame& stack )
+{
+    NANOCLR_HEADER(); hr = S_OK;
+    {
+
+        signed int retValue = Board::ResetReason(  hr );
+        NANOCLR_CHECK_HRESULT( hr );
+        SetResult_INT32( stack, retValue );
+    }
+    NANOCLR_NOCLEANUP();
+}
+
+HRESULT Library_MiniRover_Native_MiniRover_Native_Board::FullReset___STATIC__VOID( CLR_RT_StackFrame& stack )
+{
+    NANOCLR_HEADER(); hr = S_OK;
+    {
+
+        Board::FullReset(  hr );
+        NANOCLR_CHECK_HRESULT( hr );
+
+    }
+    NANOCLR_NOCLEANUP();
+}

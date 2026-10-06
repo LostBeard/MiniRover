@@ -96,6 +96,10 @@ namespace MiniRover.Car
 
         static string Num(double v) => v.ToString("F3");
 
+        /// <summary>The last abnormal reset (crash, brownout, watchdog) and when: diagnostics that survive the
+        /// self-healing full restart, which would otherwise hide the cause.</summary>
+        public string LastAbnormalReset { get => GetString("diag.reset", ""); set => SetString("diag.reset", value); }
+
         /// <summary>Why the last WiFi connection attempt failed (shown to the app in setup mode).</summary>
         public string LastWifiError { get => GetString("wifi.error", ""); set => SetString("wifi.error", value); }
 

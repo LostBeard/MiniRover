@@ -252,12 +252,15 @@ void IRAM_ATTR ll_cam_send_event(cam_obj_t *cam, cam_event_t cam_event, BaseType
     if (xQueueSendFromISR(cam->event_queue, (void *)&cam_event, HPTaskAwoken) != pdTRUE) {
         ll_cam_stop(cam);
         cam->state = CAM_STATE_IDLE;
+        // MiniRover: every string this ISR prints must be in DRAM, the %s arguments too. The queue overflows
+        // when a flash write (cache off) stalls the task below; a plain literal lives in flash, and reading it
+        // with the cache off froze the chip (interrupt watchdog, measured at VGA during a settings save).
 #if CAM_LOG_SPAM_EVERY_FRAME
-        ESP_DRAM_LOGD(TAG, "EV-%s-OVF", cam_event==CAM_IN_SUC_EOF_EVENT ? "EOF" : "VSYNC");
+        ESP_DRAM_LOGD(DRAM_STR("cam_hal"), "EV-%s-OVF", cam_event==CAM_IN_SUC_EOF_EVENT ? DRAM_STR("EOF") : DRAM_STR("VSYNC"));
 #else
         static uint16_t ovf_cnt = 0;
         CAM_WARN_THROTTLE(ovf_cnt,
-                          cam_event==CAM_IN_SUC_EOF_EVENT ? "EV-EOF-OVF" : "EV-VSYNC-OVF");
+                          cam_event==CAM_IN_SUC_EOF_EVENT ? DRAM_STR("EV-EOF-OVF") : DRAM_STR("EV-VSYNC-OVF"));
 #endif
     }
 }
