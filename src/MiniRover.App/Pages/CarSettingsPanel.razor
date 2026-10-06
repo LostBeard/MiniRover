@@ -48,6 +48,23 @@
         </section>
 
         <section>
+            <h3>Picture clean-up (this browser)</h3>
+            <label class="mr-check"><input type="checkbox" checked="@Car.VideoEnhance" @onchange="@(e => SetLocal(c => c.VideoEnhance = Bool(e) == "1"))" data-test="set-video-enhance" /> Clean up the video on the graphics card</label>
+            <p class="mr-muted">Brightens dark rooms, removes the colour cast of indoor light and smooths noise. Needs WebGPU (Chrome, Edge); without it the plain picture is shown.</p>
+            @if (Car.VideoEnhance)
+            {
+                <label>Noise reduction: @Pct(Car.VideoDenoise)
+                    <UiSlider Min="0" Max="1" Step="0.05" Value="@Car.VideoDenoise" ValueChanged="@(v => SetLocal(c => c.VideoDenoise = v))" />
+                </label>
+                <label>Sharpening: @Pct(Car.VideoSharpen)
+                    <UiSlider Min="0" Max="1" Step="0.05" Value="@Car.VideoSharpen" ValueChanged="@(v => SetLocal(c => c.VideoSharpen = v))" />
+                </label>
+                <label class="mr-check"><input type="checkbox" checked="@Car.VideoAutoLevels" @onchange="@(e => SetLocal(c => c.VideoAutoLevels = Bool(e) == "1"))" /> Automatic brightness</label>
+                <label class="mr-check"><input type="checkbox" checked="@Car.VideoWhiteBalance" @onchange="@(e => SetLocal(c => c.VideoWhiteBalance = Bool(e) == "1"))" /> Automatic colour balance</label>
+            }
+        </section>
+
+        <section>
             <h3>Camera aim</h3>
             <p class="mr-muted">The camera is held at its center position. Adjust until it looks straight ahead and level.</p>
             <label>Left / right: @Deg(_s.GetDouble("pan.trim", 0))

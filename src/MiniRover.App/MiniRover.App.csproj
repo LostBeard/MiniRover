@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\MiniRover.Protocol\MiniRover.Protocol.csproj" />
     <ProjectReference Include="..\MiniRover.Client\MiniRover.Client.csproj" />
+    <ProjectReference Include="..\MiniRover.Video\MiniRover.Video.csproj" />
   </ItemGroup>
 
 </Project>

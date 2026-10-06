@@ -2,25 +2,37 @@
 @using SpawnDev.RTC
 @using SpawnDev.SpawnJS.JSObjects
 @using SpawnDev.SpawnJS.RazorRenderer
+@using SpawnDev.ILGPU.Rendering
+@using MiniRover.Video
 @inject SpawnJSRuntime JS
 @inject SpawnDomRenderer Renderer
 
 @* Live camera frames. Each JPEG arrives as a JavaScript ArrayBuffer and is decoded by the browser
-   (createImageBitmap) straight onto the canvas: the bytes never cross into .NET memory. When decoding falls
-   behind, only the newest frame is kept, so the picture never lags behind the car. *@
-<div class="mr-video" data-test="drive-video" data-frames="@_decoded" data-fps="@_fps">
-    <canvas @ref="_canvasRef" class="mr-video-canvas"></canvas>
+   (createImageBitmap): the bytes never cross into .NET memory. Plain picture: the bitmap is drawn on a 2D canvas.
+   Picture clean-up (per car, optional): the bitmap is copied into a GPU buffer, cleaned up by MiniRover.Video's
+   kernels and presented to a WebGPU canvas, never leaving the GPU. When decoding falls behind, only the newest frame
+   is kept, so the picture never lags behind the car. *@
+<div class="mr-video" data-test="drive-video" data-frames="@_decoded" data-fps="@_fps" data-enhanced="@(_gpuActive ? "1" : "0")" data-fx-ms="@_fxMs.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)">
+    <canvas @ref="_canvasRef" class="mr-video-canvas" style="@(_gpuActive ? "display:none" : null)"></canvas>
+    <canvas @ref="_gpuCanvasRef" class="mr-video-canvas" style="@(_gpuActive ? null : "display:none")"></canvas>
     @if (_decoded == 0)
     {
         <span class="mr-video-note mr-muted">@(Channel == null ? "Waiting for video..." : "Starting the camera...")</span>
+    }
+    @if (_gpuProblem != null)
+    {
+        <span class="mr-video-badge mr-muted" data-test="video-enhance-problem">Picture clean-up off: @_gpuProblem</span>
     }
 </div>
 
 @code {
     [Parameter] public IRTCDataChannel? Channel { get; set; }
 
-    ElementReference _canvasRef;
-    HTMLCanvasElement? _canvas;
+    /// <summary>The car being driven: its picture clean-up settings are read for every frame.</summary>
+    [Parameter] public Services.SavedCar? Car { get; set; }
+
+    ElementReference _canvasRef, _gpuCanvasRef;
+    HTMLCanvasElement? _canvas, _gpuCanvas;
     CanvasRenderingContext2D? _ctx;
     Window? _window;
     IRTCDataChannel? _subscribed;
@@ -29,6 +41,15 @@
     int _decoded, _fps, _windowFrames, _width, _height;
     readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     bool _disposed;
+
+    // GPU clean-up
+    VideoEnhancer? _fx;
+    IExternalImageCopier? _copier;
+    ICanvasRenderer? _presenter;
+    readonly VideoEnhanceSettings _fxSettings = new();
+    bool _gpuActive, _wasEnhancing;
+    string? _gpuProblem;
+    double _fxMs;   // smoothed GPU time per frame (copy + kernels + present)
 
     protected override void OnParametersSet()
     {
@@ -64,13 +85,23 @@
                 using (bitmap)
                 {
                     int w = (int)bitmap.Width, h = (int)bitmap.Height;
-                    if (w != _width || h != _height)
+                    bool enhance = Car?.VideoEnhance == true && _gpuProblem == null;
+                    if (enhance && await DrawEnhancedAsync(bitmap, w, h))
                     {
-                        // The car can change resolution mid-stream; resize the canvas only then (setting it clears it).
-                        _canvas!.Width = _width = w;
-                        _canvas.Height = _height = h;
+                        if (!_gpuActive) { _gpuActive = true; StateHasChanged(); }
                     }
-                    _ctx!.DrawImage(bitmap, 0, 0);
+                    else
+                    {
+                        if (_gpuActive) { _gpuActive = false; StateHasChanged(); }
+                        if (w != _width || h != _height)
+                        {
+                            // The car can change resolution mid-stream; resize the canvas only then (setting it clears it).
+                            _canvas!.Width = _width = w;
+                            _canvas.Height = _height = h;
+                        }
+                        _ctx!.DrawImage(bitmap, 0, 0);
+                    }
+                    _wasEnhancing = enhance;
                     bitmap.Close();
                 }
                 _decoded++;
@@ -94,6 +125,60 @@
         }
     }
 
+    /// <summary>Bitmap -> GPU buffer -> clean-up kernels -> WebGPU canvas. False (and the plain picture from then on)
+    /// when the browser has no usable WebGPU or the GPU path fails.</summary>
+    async Task<bool> DrawEnhancedAsync(ImageBitmap bitmap, int w, int h)
+    {
+        try
+        {
+            var accelerator = await GpuVideo.GetAsync();
+            if (accelerator == null)
+            {
+                _gpuProblem = GpuVideo.Status;
+                StateHasChanged();
+                return false;
+            }
+            if (_fx == null)
+            {
+                _fx = new VideoEnhancer(accelerator);
+                _copier = ExternalImageCopier.Create(accelerator);
+                _presenter = CanvasRendererFactory.Create(accelerator);
+                _gpuCanvas = Renderer.GetElement<HTMLCanvasElement>(_gpuCanvasRef);
+                if (_gpuCanvas == null) return false;
+                _presenter.AttachCanvas(_gpuCanvas);
+            }
+            if (!_wasEnhancing) _fx.ResetHistory(); // switched on (again): no stale frames in the noise filter
+
+            var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            if (_gpuCanvas!.Width != w || _gpuCanvas.Height != h)
+            {
+                // The renderer draws at the frame's own size and leaves sizing the canvas to us (left at the browser
+                // default 300x150 it showed a cropped, stretched corner of the frame).
+                _gpuCanvas.Width = w;
+                _gpuCanvas.Height = h;
+            }
+            var input = _fx.Prepare(w, h);
+            _copier!.CopyToBuffer(bitmap, w, h, input);
+            _fxSettings.Denoise = (float)Car!.VideoDenoise;
+            _fxSettings.Sharpen = (float)Car.VideoSharpen;
+            _fxSettings.AutoLevels = Car.VideoAutoLevels;
+            _fxSettings.WhiteBalance = Car.VideoWhiteBalance;
+            _fx.Process(_fxSettings);
+            await _fx.Accelerator.SynchronizeAsync();
+            await _presenter!.PresentAsync(_fx.Output);
+            double ms = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+            _fxMs = _fxMs <= 0 ? ms : _fxMs * 0.9 + ms * 0.1;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _gpuProblem = ex.Message;
+            JS.Log("MiniRover video clean-up failed, showing the plain picture: " + ex);
+            StateHasChanged();
+            return false;
+        }
+    }
+
     bool EnsureCanvas()
     {
         if (_ctx != null) return true;
@@ -113,6 +198,10 @@
         if (_subscribed != null) _subscribed.OnArrayBufferMessage -= OnFrame;
         _pending?.Dispose();
         _pending = null;
+        _presenter?.Dispose();
+        _copier?.Dispose();
+        _fx?.Dispose();   // the accelerator itself is shared (GpuVideo) and stays
+        _gpuCanvas?.Dispose();
         _ctx?.Dispose();
         _canvas?.Dispose();
         _window?.Dispose();

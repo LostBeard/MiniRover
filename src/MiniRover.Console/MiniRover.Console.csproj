@@ -13,11 +13,14 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
     <PackageReference Include="System.IO.Ports" Version="9.0.0" />
+    <PackageReference Include="StbImageSharp" Version="2.30.15" />
+    <PackageReference Include="StbImageWriteSharp" Version="1.16.7" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MiniRover.Protocol\MiniRover.Protocol.csproj" />
     <ProjectReference Include="..\MiniRover.Client\MiniRover.Client.csproj" />
+    <ProjectReference Include="..\MiniRover.Video\MiniRover.Video.csproj" />
   </ItemGroup>
 
 </Project>

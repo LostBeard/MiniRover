@@ -200,6 +200,27 @@ static class LinkCommand
                 case "face" when p.Length > 1 && p[1] == "alive": link.Face(CarLink.FaceAlive); break;
                 case "face" when p.Length > 2 && p[1] == "mood": link.Face(CarLink.FaceMood, int.Parse(p[2])); break;
                 case "face" when p.Length > 3 && p[1] == "text": link.Face(CarLink.FaceText, int.Parse(p[2]), string.Join(' ', p[3..])); break;
+                case "snap":
+                {
+                    // snap <count> <dir> [size] [quality]: save consecutive frames as JPEG files (test material for
+                    // the video processing stages; a sequence, so temporal filters can be judged too).
+                    int count = int.Parse(p[1]);
+                    string dir = p[2];
+                    int size = p.Length > 3 ? int.Parse(p[3]) : 0, q = p.Length > 4 ? int.Parse(p[4]) : 0;
+                    Directory.CreateDirectory(dir);
+                    var frames = new List<byte[]>();
+                    void Grab(byte[] f) { lock (frames) if (frames.Count < count) frames.Add(f); }
+                    var ch = link.VideoChannel ?? throw new InvalidOperationException("no video channel");
+                    ch.OnBinaryMessage += Grab;
+                    link.Video(true, size, q, 0);
+                    var snapClock = Stopwatch.StartNew();
+                    while (snapClock.ElapsedMilliseconds < 30000) { lock (frames) if (frames.Count >= count) break; await Task.Delay(50); }
+                    ch.OnBinaryMessage -= Grab;
+                    link.Video(false);
+                    for (int i = 0; i < frames.Count; i++) File.WriteAllBytes(Path.Combine(dir, $"frame{i:D3}.jpg"), frames[i]);
+                    Console.WriteLine($"  saved {frames.Count} frames to {dir} in {snapClock.ElapsedMilliseconds} ms");
+                    break;
+                }
                 case "videoon": link.Video(true); break;
                 case "videooff": link.Video(false); break;
                 case "stop": link.Stop(); break;

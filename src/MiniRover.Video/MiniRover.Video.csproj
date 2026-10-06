@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MiniRover.Video</RootNamespace>
+    <!-- GPU video processing (SpawnDev.ILGPU). The browser app runs it on WebGPU; the desktop console runs the same
+         kernels on captured frames to judge each stage. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SpawnDev.ILGPU" Version="5.3.3" />
+  </ItemGroup>
+
+</Project>

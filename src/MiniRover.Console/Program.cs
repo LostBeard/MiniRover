@@ -25,6 +25,13 @@ if (args.Length >= 2 && args[0] == "monitor")
     return 0;
 }
 
+// minirover videofx <frames dir> <out dir> [denoise 0..1] [sharpen 0..1] [levels 0|1] [whitebalance 0|1]
+if (args.Length >= 3 && args[0] == "videofx")
+{
+    float Arg(int i, float d) => args.Length > i ? float.Parse(args[i], System.Globalization.CultureInfo.InvariantCulture) : d;
+    return MiniRover.ConsoleApp.VideoFxCommand.Run(args[1], args[2], Arg(3, 0.5f), Arg(4, 0.3f), Arg(5, 1) != 0, Arg(6, 1) != 0);
+}
+
 // minirover drivetest <publish wwwroot> [httpPort] [cdpPort] [screenshotDir] [--reboot COMx] [--loss permille] [--car http://ip]   (THE WHEELS MUST BE OFF THE GROUND)
 if (args.Length >= 2 && args[0] == "drivetest")
 {

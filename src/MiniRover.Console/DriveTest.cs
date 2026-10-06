@@ -190,6 +190,26 @@ public static class DriveTest
                 if (carSize != camSize) throw new Exception($"FAIL settings panel shows camera size {camSize}, the car has {carSize}");
             }
             Console.WriteLine($"PASS settings loaded (camera size {camSize}{(carHttp != null ? ", matches the car" : "")})");
+
+            // Picture clean-up: switch it on, the WebGPU canvas takes over, frames keep coming; switch it off again.
+            {
+                string Attr(string a) => EvalAsync(cdp, Deep("[data-test=drive-video]") + ".getAttribute('" + a + "')").Result.GetValue<string>();
+                int plainFps = int.Parse(Attr("data-fps"));
+                const string toggle = "(()=>{const c=@D;c.checked=@V;c.dispatchEvent(new Event('change',{bubbles:true}));return true;})()";
+                await EvalAsync(cdp, toggle.Replace("@D", Deep("[data-test=set-video-enhance]")).Replace("@V", "true"));
+                await WaitForAttrAsync(cdp, "[data-test=drive-video]", "data-enhanced", "1", TimeSpan.FromSeconds(20), "the GPU picture clean-up to take over");
+                int fx0 = int.Parse(Attr("data-frames"));
+                await Task.Delay(4000);
+                int fx1 = int.Parse(Attr("data-frames"));
+                string fxMs = Attr("data-fx-ms");
+                bool problem = (await EvalAsync(cdp, Deep("[data-test=video-enhance-problem]") + " != null")).GetValue<bool>();
+                if (problem) throw new Exception("FAIL picture clean-up reported a problem");
+                if (fx1 - fx0 < 20) throw new Exception($"FAIL picture clean-up: only {fx1 - fx0} frames in 4 s");
+                await cdp.ScreenshotAsync(Path.Combine(shotDir, "drive-4-enhanced.png"));
+                await EvalAsync(cdp, toggle.Replace("@D", Deep("[data-test=set-video-enhance]")).Replace("@V", "false"));
+                await WaitForAttrAsync(cdp, "[data-test=drive-video]", "data-enhanced", "0", TimeSpan.FromSeconds(5), "the plain picture to come back");
+                Console.WriteLine($"PASS picture clean-up on the GPU: {(fx1 - fx0) / 4.0:F1} fps (plain {plainFps}), {fxMs} ms per frame copy+kernels+present; off again");
+            }
             sw.Restart();
             await ClickAsync(cdp, "[data-test=wheel-test-0]");
             await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "1", TimeSpan.FromSeconds(3), "the wheel test to move a wheel");

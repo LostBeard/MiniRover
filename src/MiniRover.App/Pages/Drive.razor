@@ -43,7 +43,7 @@
         <div class="mr-banner mr-warn" data-test="drive-battery-warning">The battery switch is off (USB power only): the wheels and camera servos will not move.</div>
     }
 
-    <VideoView Channel="_video" />
+    <VideoView Channel="_video" Car="Car" />
 
     <div class="mr-controls">
         <Stick Label="Drive" TestId="stick-drive" OnMove="OnDriveStick" />
@@ -428,9 +428,10 @@
     // are calibrated (Settings).
     static readonly (string Name, int Mode)[] LightModes =
     [
-        ("dim", CarLink.LightsSolid), ("headlights", CarLink.LightsHeadlights), ("hazard", CarLink.LightsHazard),
+        // "off" first: the car starts with its lights off (they drain the batteries), so this matches it.
+        ("off", CarLink.LightsOff), ("headlights", CarLink.LightsHeadlights), ("hazard", CarLink.LightsHazard),
         ("police", CarLink.LightsPolice), ("rainbow", CarLink.LightsRainbow), ("battery", CarLink.LightsBattery),
-        ("off", CarLink.LightsOff),
+        ("dim", CarLink.LightsSolid),
     ];
     int _lightsIndex;
 

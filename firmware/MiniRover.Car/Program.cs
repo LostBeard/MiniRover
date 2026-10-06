@@ -55,9 +55,9 @@ namespace MiniRover.Car
                 }
                 if (car.Lights != null)
                 {
-                    // Dim white so a powered car is obvious. Off on USB power alone (brownout).
-                    if (car.HasBattery) car.Lights.Set(LightsService.ModeSolid, 40, 40, 40, 0);
-                    else car.Lights.Set(LightsService.ModeOff, 0, 0, 0, 0);
+                    // Lights start off: lit LEDs drain the batteries for nothing, and the eyes already show the car is
+                    // on. The app turns them on when asked.
+                    car.Lights.Set(LightsService.ModeOff, 0, 0, 0, 0);
                     car.Lights.Start();
                 }
                 if (car.Buzzer != null) car.Buzzer.Play(new int[] { 1568, 70, 0, 30, 2093, 90 });

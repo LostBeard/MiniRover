@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/MiniRover.Protocol/MiniRover.Protocol.csproj" />
     <Project Path="src/MiniRover.Client/MiniRover.Client.csproj" />
+    <Project Path="src/MiniRover.Video/MiniRover.Video.csproj" />
     <Project Path="src/MiniRover.Console/MiniRover.Console.csproj" />
     <Project Path="src/MiniRover.App/MiniRover.App.csproj" />
   </Folder>

@@ -33,7 +33,7 @@ namespace MiniRover.Car
         readonly byte[] _sent = new byte[Gpio32.LedCount * 3];
         readonly object _lock = new object();
 
-        int _mode = ModeSolid;
+        int _mode = ModeOff; // off by default: lit LEDs drain the batteries for nothing (the eyes show the car is on)
         byte _r = 40, _g = 40, _b = 40;
         int _param;
         bool _wasMoving;

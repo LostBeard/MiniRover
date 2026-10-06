@@ -16,6 +16,13 @@ public sealed class SavedCar
     // Driving feel, per car and per browser (the car's own top speed is a car setting).
     public double SteerGain { get; set; } = 0.8;
     public double Expo { get; set; } = 0.35;
+    // Picture clean-up on the GPU (MiniRover.Video), per car and per browser. Off by default: it needs WebGPU.
+    public bool VideoEnhance { get; set; }
+    public double VideoDenoise { get; set; } = 0.5;
+    public double VideoSharpen { get; set; } = 0.3;
+    public bool VideoAutoLevels { get; set; } = true;
+    public bool VideoWhiteBalance { get; set; } = true;
+
     /// <summary>Signaling server, empty = the default (SpawnDev hub). A LAN server (MiniRover.Server) goes here.</summary>
     public string TrackerUrl { get; set; } = "";
 }

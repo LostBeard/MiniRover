@@ -146,7 +146,8 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [ ] Firmware images as GitHub Release assets + flashing guide
 
 ### Phase 6 - Machine-learning modes
-- [ ] Optional video processing on the GPU (SpawnDev.ILGPU, TJ 2026-10-06): the decoded frame stays on the GPU (VideoFrame -> texture, never a .NET byte[]) and runs through switchable stages - JPEG block/ringing cleanup, denoise (temporal, the car's camera is noisy in low light), auto levels / white balance, sharpen, upscale for full screen. Same frame source feeds the ML modes below, so the pipeline is the shared front end for face tracking and follow mode. Measure each stage's cost and the before/after look on real car frames before making anything a default
+- [x] Optional picture clean-up on the GPU (SpawnDev.ILGPU, TJ 2026-10-06), per car in Settings, off by default: decoded bitmap -> GPU buffer (ExternalImageCopier) -> MiniRover.Video kernels -> WebGPU canvas, never through .NET. Stages: JPEG deblocking, edge-preserving spatial + motion-adaptive temporal denoise, grey-world white balance measured on mid-tones and faded out in the shadows (the camera's shadows are neutral while its mid-tones are yellow under room light), auto levels + a pow-free shadow lift, unsharp mask, top-row fix. Measured on car frames (`videofx`, QVGA): brightness 44.6 -> 83.7, relative noise 5.5% -> 2.7%, block grid 2.30 -> 1.52. In Chrome on the car: 14.8 fps (same as plain), 6.2 ms per frame on the GPU
+- [ ] Picture clean-up next: upscaling for full screen; the OV2640's own white balance / exposure / gain settings (sensor-side may beat post-processing for noise); feed the cleaned frames to the ML modes
 - [ ] Face tracking: face detection -> camera pan/tilt controller (servos only, wheels stay still)
 - [ ] Follow me: pose or person detection -> steering + distance keeping, sonar stop
 - [ ] Follow an object: pick a detected class (ball, pet, ...)
