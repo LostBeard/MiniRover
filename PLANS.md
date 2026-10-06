@@ -146,6 +146,7 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [ ] Firmware images as GitHub Release assets + flashing guide
 
 ### Phase 6 - Machine-learning modes
+- [ ] Optional video processing on the GPU (SpawnDev.ILGPU, TJ 2026-10-06): the decoded frame stays on the GPU (VideoFrame -> texture, never a .NET byte[]) and runs through switchable stages - JPEG block/ringing cleanup, denoise (temporal, the car's camera is noisy in low light), auto levels / white balance, sharpen, upscale for full screen. Same frame source feeds the ML modes below, so the pipeline is the shared front end for face tracking and follow mode. Measure each stage's cost and the before/after look on real car frames before making anything a default
 - [ ] Face tracking: face detection -> camera pan/tilt controller (servos only, wheels stay still)
 - [ ] Follow me: pose or person detection -> steering + distance keeping, sonar stop
 - [ ] Follow an object: pick a detected class (ball, pet, ...)
