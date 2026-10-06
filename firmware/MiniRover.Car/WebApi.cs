@@ -47,6 +47,24 @@ namespace MiniRover.Car
                 case "/status":
                     HttpServer.SendText(c, 200, "application/json", StatusJson());
                     return;
+                case "/stop":
+                    // Always open: anyone standing next to the car may stop it.
+                    if (_car.Drive != null) _car.Drive.Stop();
+                    Ok(c);
+                    return;
+            }
+
+            // Everything else moves the car or changes it, and HTTP on the LAN has no pairing: off unless the owner
+            // turned it on over a paired channel (BLE with the code on the eyes, or the authenticated app link).
+            if (!_car.Settings.HttpApi)
+            {
+                HttpServer.SendText(c, 403, "text/plain",
+                    "The car's local test API is off. Turn it on from a paired app or `minirover hw COMx \"set http.api=1\"`.");
+                return;
+            }
+
+            switch (r.Path)
+            {
                 case "/servo/center":
                     Need(_car.Servos, "servos");
                     _car.Servos.CenterBoth();
@@ -67,10 +85,6 @@ namespace MiniRover.Car
                 case "/motor":
                     Need(_car.Drive, "drive");
                     _car.Drive.DriveMotor((int)r.GetDouble("m", 0), r.GetDouble("speed", 0), (int)r.GetDouble("ms", DriveService.DefaultHoldMs));
-                    Ok(c);
-                    return;
-                case "/stop":
-                    if (_car.Drive != null) _car.Drive.Stop();
                     Ok(c);
                     return;
                 case "/leds":

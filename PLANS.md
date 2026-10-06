@@ -108,7 +108,7 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [x] Deadman over WiFi: 300 ms hold -> stopped within 345 ms of sending, 1000 ms hold -> within 1036 ms (HTTP); over WebRTC one drive frame with 300 / 1000 ms hold -> telemetry reports stopped at 519 / 1236 ms (includes up to 200 ms telemetry period)
 - [x] `MiniRover.Console link` drives the real car (`MiniRover.Client.CarConnection`, shared with the browser app)
 - [x] WiFi modem sleep off once the BLE window closes (ESP-IDF requires it while Bluetooth is on): 60 status polls max 0.43 s, median 0.18 s (one earlier poll had stalled 1.4 s with it on)
-- [ ] The HTTP test API is unauthenticated on the LAN: gate it (pairing key) or make it opt-in before a release
+- [x] HTTP test API off by default (`http.api`, settable only over paired channels); `/status` and `/stop` stay open; verified on the car (403 / 200). Docs/car-api.md
 - [ ] Report upstream: nanoFramework `HMACSHA256(byte[] key)` keeps the caller's array and `Dispose()` zeroes it (wiped the car's pairing key; MiniRover uses `HashData`)
 
 ### Phase 4 - Browser app

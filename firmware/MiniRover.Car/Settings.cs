@@ -46,6 +46,9 @@ namespace MiniRover.Car
         // The FNK0053 head holds the sensor upside down: a true 180-degree rotation (flip + mirror) makes it upright and
         // unmirrored. Verified on the real car by panning: at pan 160 (camera turned left) the scene moved right.
         public bool CameraMirror { get => GetDouble("camera.mirror", 1) != 0; set => Set("camera.mirror", value ? 1 : 0); }
+        /// <summary>The local HTTP test API (curl drive/servo/led routes). Off by default: HTTP on the LAN is not paired.</summary>
+        public bool HttpApi { get => GetDouble("http.api", 0) != 0; set => Set("http.api", value ? 1 : 0); }
+
         public bool CameraFlip { get => GetDouble("camera.flip", 1) != 0; set => Set("camera.flip", value ? 1 : 0); }
 
         /// <summary>Why the last WiFi connection attempt failed (shown to the app in setup mode).</summary>
@@ -55,7 +58,7 @@ namespace MiniRover.Car
         public static readonly string[] ClientKeys =
         {
             "pan.trim", "tilt.trim", "battery.coef", "drive.limit", "motor.minduty", "led.brightness",
-            "camera.size", "camera.quality", "camera.fps", "camera.mirror", "camera.flip",
+            "camera.size", "camera.quality", "camera.fps", "camera.mirror", "camera.flip", "http.api",
             "motor0.invert", "motor1.invert", "motor2.invert", "motor3.invert",
             "motor0.gain", "motor1.gain", "motor2.gain", "motor3.gain",
         };
@@ -85,6 +88,7 @@ namespace MiniRover.Car
                 case "camera.fps": CameraMaxFps = (int)Clamp(v, 1, 30); return true;
                 case "camera.mirror": CameraMirror = v != 0; return true;
                 case "camera.flip": CameraFlip = v != 0; return true;
+                case "http.api": HttpApi = v != 0; return true;
             }
             // motorN.invert / motorN.gain, N = 0..3
             if (key.Length >= 11 && key.StartsWith("motor") && key[5] >= '0' && key[5] <= '3')
