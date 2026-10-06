@@ -56,6 +56,7 @@ Setup docs grow with the project:
 2. [Centering the camera servos before you mount the camera](Docs/servo-calibration.md)
 3. [Battery notes](Docs/battery.md)
 4. [Architecture](Docs/architecture.md)
+5. [Building the firmware](Docs/firmware-build.md) and [flashing the car](Docs/flashing.md)
 
 ## Repository layout
 

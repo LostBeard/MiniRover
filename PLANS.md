@@ -59,7 +59,7 @@ tests/
 
 ### Phase 0 - Scaffold
 - [x] Repository, MIT license, README, docs (hardware, servo calibration, battery, architecture), this plan
-- [ ] GitHub repository + first push
+- [x] GitHub repository + first push (github.com/LostBeard/MiniRover)
 
 ### Phase 0b - Shared nanoFramework WebRTC library
 - [ ] New repo `SpawnDev.nanoFramework.WebRTC`, contents moved from SpawnWear:
@@ -69,7 +69,11 @@ tests/
 - [ ] Per-message size limits configurable and PSRAM-backed (SpawnWear: 512 B TX / 1 KB RX; JPEG frames need tens of KB)
 - [ ] SpawnWear rebuilt and verified on the shared library
 
-### Phase 1 - Car bring-up on stock nanoFramework firmware
+### Phase 1 - Car bring-up
+Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over the kit's CH340C (overruns at 921600 baud, see Docs/firmware-build.md), so Phase 1 runs on the MiniRover firmware target (460800 baud + CRC32), which pulls part of Phase 2 forward.
+- [x] Firmware target `MINIROVER_ESP32` builds (nanoCLR 0x1576a0, 26% of the app partition free); deploy works
+- [x] Car app boots on the bare board: brownout guard (no servos on USB power), faults reported per part, WiFi setup access point up
+- [x] RMT receivers (sonar, IR) initialise (fixed a nanoFramework RMT bug for the base ESP32)
 - [ ] Board drivers on the shared I2C bus: PCA9685, PCF8574, HT16K33
 - [ ] **`servo center`** (both servos to 90 degrees) so the camera head can be mounted
 - [ ] Motors: per-motor direction, trim, skid steering mixer

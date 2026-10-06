@@ -30,8 +30,13 @@ namespace MiniRover.Car.Drivers
             {
                 ResolutionHz = ResolutionHz,
                 // A gap longer than any NEC mark/space (the 9 ms leader is the longest) ends the frame.
-                IdleThreshold = 12_000,
-                ReceiveTimeout = TimeSpan.FromMilliseconds(500),
+                // RMT thresholds are in NANOSECONDS (not ticks): 12 ms.
+                IdleThreshold = 12_000_000,
+                // The IR receiver module already strips the 38 kHz carrier; RMT demodulation stays off
+                // (the base ESP32 RMT has none anyway).
+                EnableDemodulation = false,
+                // Receive() THROWS TimeoutException when no frame arrives; a long wait keeps that rare.
+                ReceiveTimeout = TimeSpan.FromSeconds(5),
             };
             _rx = new ReceiverChannel(settings);
             _thread = new Thread(Loop);
@@ -46,6 +51,10 @@ namespace MiniRover.Car.Drivers
                 try
                 {
                     symbols = _rx.Receive();
+                }
+                catch (TimeoutException)
+                {
+                    continue; // no button pressed within the receive window: normal
                 }
                 catch (Exception ex)
                 {

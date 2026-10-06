@@ -31,7 +31,10 @@ namespace MiniRover.Car.Drivers
             {
                 ResolutionHz = ResolutionHz,
                 // The echo line idles low; a frame ends once it has been idle longer than any valid echo.
-                IdleThreshold = 30_000,
+                // RMT thresholds are in NANOSECONDS (not ticks): 30 ms.
+                IdleThreshold = 30_000_000,
+                // The echo is a plain pulse, not a carrier: no demodulation (the base ESP32 RMT has none anyway).
+                EnableDemodulation = false,
                 ReceiveTimeout = TimeSpan.FromMilliseconds(40),
             };
             _echo = new ReceiverChannel(settings);
@@ -54,8 +57,20 @@ namespace MiniRover.Car.Drivers
             // Two managed GPIO writes take well over the 10 us minimum trigger pulse.
             _trigger.Write(PinValue.High);
             _trigger.Write(PinValue.Low);
-            RmtSymbols symbols = _echo.Receive();
-            _echo.Stop();
+            RmtSymbols symbols;
+            try
+            {
+                symbols = _echo.Receive();
+            }
+            catch (TimeoutException)
+            {
+                // Receive() throws when no echo arrives in the window: no obstacle in range, or no sensor fitted.
+                symbols = null;
+            }
+            finally
+            {
+                _echo.Stop();
+            }
 
             if (symbols == null || symbols.Count == 0)
             {
