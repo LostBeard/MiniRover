@@ -12,7 +12,11 @@ namespace MiniRover.Car
     public sealed class BatteryService
     {
         const int PeriodMs = 2000;
-        const double AdcFullScaleVolts = 3.3; // raw-count scaling; the coefficient absorbs the ESP32 ADC's error
+        // Raw 12-bit counts at 12 dB attenuation -> volts at the pin. The ESP32 ADC is non-linear and nanoFramework
+        // applies no eFuse calibration, so this is Freenove's fitted formula (adc/4096*3.9 * 3.7): a full 2S pack
+        // read raw 2369 -> 8.35 V on the real car, where 3.3 * 3.4 said 6.50 V and would have tripped Low.
+        // TODO(native interop): read calibrated millivolts (adc_cali, Vref is in eFuse on these chips) and drop the fit.
+        public const double AdcFullScaleVolts = 3.9;
         const double AdcMaxCount = 4095;
 
         // Per-cell thresholds (2 cells in series), applied to rested readings.

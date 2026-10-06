@@ -158,7 +158,7 @@ namespace MiniRover.Car
             Settings s = _car.Settings;
             if (r.Get("pan.trim") != null) s.PanTrim = r.GetDouble("pan.trim", 0);
             if (r.Get("tilt.trim") != null) s.TiltTrim = r.GetDouble("tilt.trim", 0);
-            if (r.Get("battery.coef") != null) s.BatteryCoefficient = r.GetDouble("battery.coef", 3.4);
+            if (r.Get("battery.coef") != null) s.BatteryCoefficient = r.GetDouble("battery.coef", 3.7);
             if (r.Get("drive.limit") != null) s.SpeedLimit = r.GetDouble("drive.limit", 1);
             if (r.Get("motor.minduty") != null) s.MotorMinimumDuty = (int)r.GetDouble("motor.minduty", 1600);
             if (r.Get("led.brightness") != null) s.LedBrightness = (int)r.GetDouble("led.brightness", 64);

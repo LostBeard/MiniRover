@@ -37,7 +37,8 @@ All I2C devices share one bus: **SDA = GPIO13, SCL = GPIO14**.
 | 14, 15 | Motor M1 (IN1 = 15, IN2 = 14) |
 
 - IN1 high + IN2 low = forward, IN1 low + IN2 high = backward.
-- **M1 and M2 are the left side, M3 and M4 the right side.** From the tutorial's layout diagram, M1/M3 are at the front (line-tracking end) and M2/M4 at the rear **(confirm)**.
+- **M1 = front-left, M2 = rear-left, M3 = front-right, M4 = rear-right** (front = the line-tracking end). Verified on a real car.
+- **Direction depends on assembly.** On the first car tested, all four motors ran backwards with Freenove's IN1 = forward convention (the motor leads were plugged the other way round). MiniRover stores a per-motor direction flag on the car, set once during setup (`motorN.invert`), instead of changing the firmware.
 - The PCA9685 has one PWM frequency for all 16 channels. Servos need about 50 Hz, so the motors run at 50 Hz PWM too. (One of Freenove's libraries switches the chip to 1 kHz for motors and back to 50 Hz for servos; MiniRover keeps one frequency so servos and motors can be driven at the same time.)
 - Motors can turn the wrong way if a motor is wired reversed. MiniRover has per-motor direction invert and trim in its settings.
 

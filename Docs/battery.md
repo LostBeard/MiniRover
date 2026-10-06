@@ -19,8 +19,10 @@ The pack goes through a resistor divider (about 1/4) into **GPIO32**, the same p
 
 The ESP32 ADC is not precise out of the box, and the divider resistors have tolerance. MiniRover:
 
-- uses the ESP32's factory ADC calibration (eFuse) to convert raw readings to millivolts;
-- multiplies by a **divider coefficient** stored on the car (default 4.0, Freenove's current value). You can calibrate it once in **Settings -> Battery** by entering the pack voltage measured with a multimeter.
+- converts the raw 12-bit reading with Freenove's fitted formula `raw / 4096 * 3.9 * 3.7` (on the first car tested, a full pack read raw 2369 = 8.35 V). The ESP32 ADC is non-linear and nanoFramework does not apply the chip's factory calibration yet; reading calibrated millivolts (the reference voltage is stored in the chip's eFuse) is planned for the firmware's native code;
+- multiplies by a **divider coefficient** stored on the car (default 3.7). You can calibrate it once in **Settings -> Battery** by entering the pack voltage measured with a multimeter.
+
+The car only reads the battery when the pack is switched on. With the power switch off and USB connected, the board still runs (lights on the shield stay lit from USB) but the battery reads 0 V and the car refuses to drive or move the servos.
 
 ## Voltage to percent
 

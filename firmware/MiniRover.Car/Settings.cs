@@ -20,9 +20,9 @@ namespace MiniRover.Car
         public double PanTrim { get => GetDouble("pan.trim", 0); set => Set("pan.trim", value); }
         public double TiltTrim { get => GetDouble("tilt.trim", 0); set => Set("tilt.trim", value); }
 
-        /// <summary>Pack volts per pin volt. Default 3.4 is Freenove's value for raw (uncalibrated) ADC
-        /// readings; calibrate it against a multimeter (Docs/battery.md).</summary>
-        public double BatteryCoefficient { get => GetDouble("battery.coef", 3.4); set => Set("battery.coef", value); }
+        /// <summary>Pack volts per pin volt, paired with BatteryService.AdcFullScaleVolts (Freenove's fitted
+        /// raw-ADC formula uses 3.7). Calibrate against a multimeter (Docs/battery.md).</summary>
+        public double BatteryCoefficient { get => GetDouble("battery.coef", 3.7); set => Set("battery.coef", value); }
 
         /// <summary>Global speed limit 0..1 applied to every drive command ("kid mode" below 1).</summary>
         public double SpeedLimit { get => GetDouble("drive.limit", 1.0); set => Set("drive.limit", value); }
