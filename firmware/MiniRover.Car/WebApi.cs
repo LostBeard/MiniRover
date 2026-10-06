@@ -261,12 +261,14 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
                   .Append("\",\"ageS\":").Append(((Environment.TickCount64 - _car.LastIrMs) / 1000).ToString()).Append('}');
             }
             Settings s = _car.Settings;
-            sb.Append(",\"settings\":{\"pan.trim\":").Append(s.PanTrim.ToString("F1"))
-              .Append(",\"tilt.trim\":").Append(s.TiltTrim.ToString("F1"))
-              .Append(",\"battery.coef\":").Append(s.BatteryCoefficient.ToString("F3"))
-              .Append(",\"drive.limit\":").Append(s.SpeedLimit.ToString("F2"))
-              .Append(",\"motor.minduty\":").Append(s.MotorMinimumDuty.ToString())
-              .Append(",\"led.brightness\":").Append(s.LedBrightness.ToString()).Append('}');
+            // Every client setting, as the strings the app link reports (Settings.ValueOf), so tools can compare.
+            sb.Append(",\"settings\":{");
+            for (int i = 0; i < Settings.ClientKeys.Length; i++)
+            {
+                string key = Settings.ClientKeys[i];
+                sb.Append(i == 0 ? "\"" : ",\"").Append(key).Append("\":\"").Append(s.ValueOf(key)).Append('"');
+            }
+            sb.Append('}');
             sb.Append('}');
             return sb.ToString();
         }

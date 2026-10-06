@@ -102,6 +102,31 @@ public static class DriveTest
             await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "0", TimeSpan.FromSeconds(3), "the car to report stopped after key up");
             Console.WriteLine($"PASS key up: car reports stopped after {sw.ElapsedMilliseconds} ms");
 
+            // Settings: the panel loads the car's values, a wheel test spins a wheel, a change is stored by the car.
+            await ClickAsync(cdp, "[data-test=btn-settings]");
+            await WaitForAsync(cdp, "[data-test=set-camera-size]", TimeSpan.FromSeconds(10), "the settings panel with the car's values");
+            string camSize = (await EvalAsync(cdp, Deep("[data-test=set-camera-size]") + ".value")).GetValue<string>();
+            if (carHttp != null)
+            {
+                // The panel must show what the car actually has (a select once showed its first option instead).
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                string carSize = JsonNode.Parse(await http.GetStringAsync(carHttp.TrimEnd('/') + "/status"))!["settings"]!["camera.size"]!.GetValue<string>();
+                if (carSize != camSize) throw new Exception($"FAIL settings panel shows camera size {camSize}, the car has {carSize}");
+            }
+            Console.WriteLine($"PASS settings loaded (camera size {camSize}{(carHttp != null ? ", matches the car" : "")})");
+            sw.Restart();
+            await ClickAsync(cdp, "[data-test=wheel-test-0]");
+            await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "1", TimeSpan.FromSeconds(3), "the wheel test to move a wheel");
+            await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "0", TimeSpan.FromSeconds(3), "the wheel to stop after its test");
+            Console.WriteLine($"PASS wheel test: front-left wheel ran and stopped within {sw.ElapsedMilliseconds} ms");
+            string other = camSize == "8" ? "6" : "8";
+            await EvalAsync(cdp, "(()=>{const s=" + Deep("[data-test=set-camera-size]") + ";s.value='" + other + "';s.dispatchEvent(new Event('change',{bubbles:true}));return true;})()");
+            await WaitForTextAsync(cdp, "[data-test=settings-reply]", "saved camera.size=" + other, "the car to confirm the new picture size");
+            Console.WriteLine($"PASS setting stored by the car (camera.size {camSize} -> {other})");
+            await EvalAsync(cdp, "(()=>{const s=" + Deep("[data-test=set-camera-size]") + ";s.value='" + camSize + "';s.dispatchEvent(new Event('change',{bubbles:true}));return true;})()");
+            await WaitForTextAsync(cdp, "[data-test=settings-reply]", "saved camera.size=" + camSize, "the car to restore the picture size");
+            await ClickAsync(cdp, "[data-test=btn-settings]");
+
             // Reconnect: restart the car's program over USB (looks like a car restart to the app) and expect the page to
             // come back by itself, video included.
             if (rebootPort != null)
@@ -179,6 +204,19 @@ public static class DriveTest
             await Task.Delay(200);
         }
         throw new Exception($"FAIL no {what} ({selector} {attr}={v})");
+    }
+
+    static async Task WaitForTextAsync(Cdp cdp, string selector, string text, string what)
+    {
+        DateTime end = DateTime.UtcNow.AddSeconds(8);
+        string last = "";
+        while (DateTime.UtcNow < end)
+        {
+            last = (await EvalAsync(cdp, Deep(selector) + "?.textContent ?? ''")).GetValue<string>();
+            if (last.Contains(text)) return;
+            await Task.Delay(100);
+        }
+        throw new Exception($"FAIL timed out waiting for {what} (last: '{last}')");
     }
 
     static async Task WaitForAttrAsync(Cdp cdp, string selector, string attr, string value, TimeSpan timeout, string what)

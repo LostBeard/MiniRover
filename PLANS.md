@@ -74,6 +74,9 @@ tests/
 - [x] libpeer send path: bounded retry when network buffers are full + send error/retry counters (StatUdpSendErrors/Retries)
 - [x] libpeer SCTP: SACK processing, retransmission for reliable streams, FORWARD-TSN (RFC 3758) for video, HEARTBEAT-ACK. Measured from Chrome with injected loss: 5% -> controls intact, video 9 fps; 15% -> controls intact, video 5.3 fps; 0% -> no spurious retransmits (`drivetest --loss <permille>`)
 - [ ] SpawnWear rebuilt and verified on the shared library (Riker's call)
+- [x] libpeer: read every waiting datagram per pass (bounded burst): a SipSorcery peer's ICE consent checks were starved behind per-packet SACKs during video and the desktop dropped the car after 8 s
+- [x] SpawnDev.SIPSorcery fork (SpawnDev.RTC): FORWARD TSN receive support + advertised in INIT, and an INIT parameter-parsing bug fixed. Desktop <-> car with video and 5% injected loss: 40 s, telemetry continuous (was: dropped after 16-24 s). 5-minute session at 0% loss: 14.6 fps, longest telemetry gap 318 ms
+- [ ] Release SpawnDev.SIPSorcery + SpawnDev.RTC with the FORWARD TSN fix (nuget.org needs TJ's go); MiniRover's desktop console uses a local 10.0.10-local.1 build until then
 
 ### Phase 1 - Car bring-up
 Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over the kit's CH340C (overruns at 921600 baud, see Docs/firmware-build.md), so Phase 1 runs on the MiniRover firmware target (460800 baud + CRC32), which pulls part of Phase 2 forward.
@@ -126,7 +129,8 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [ ] LED-matrix eyes and text, light patterns
 - [ ] Sensors page with live charts
 - [ ] Battery model: Li-ion discharge curve, sag-aware smoothing, time remaining, warnings
-- [ ] Settings: servo calibration wizard, motor trim, camera, speed limit, input curves, signaling server
+- [x] Settings panel on the drive page (live link): top speed, steering sensitivity + stick curve (per car), camera size/quality/fps/orientation, camera aim (pan/tilt trim, camera held centered), per-wheel test / reversed / balance, battery calibration from a multimeter reading, LED brightness, HTTP test API, signaling server. Verified from Chrome: values match the car, wheel test spins a wheel, a change is stored
+- [ ] Guided first-run wizard (wheels, camera aim) after "Add a car"
 - [ ] Car-side modes: line following, light seeking, obstacle avoidance
 - [ ] Browser tests against the published release build
 

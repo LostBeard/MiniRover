@@ -38,6 +38,10 @@ namespace MiniRover.Car
         int _telemetrySeq;
 
         public string Status { get; private set; } = "idle";
+
+        public delegate void LinkEvent();
+        /// <summary>Called (on the link thread) each time an app proves the pairing key.</summary>
+        public LinkEvent OnAppConnected;
         /// <summary>Control messages received from the app, and how many were drive commands (this session).</summary>
         public int ControlMessages { get; private set; }
         public int DriveMessages { get; private set; }
@@ -199,6 +203,10 @@ namespace MiniRover.Car
                     proof = CarLink.CarProof(_key, clientNonce);
                 }
                 Authenticated = ok;
+                if (ok && OnAppConnected != null)
+                {
+                    try { OnAppConnected(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Link: OnAppConnected: " + ex.Message); }
+                }
                 Send(CarLink.EncodeAuthResult(ok, proof));
                 Status = ok ? "connected" : "app failed authentication";
                 System.Diagnostics.Debug.WriteLine("Link: authentication " + (ok ? "OK" : "FAILED (" + len + " bytes)"));
@@ -260,6 +268,19 @@ namespace MiniRover.Car
                         else MiniRover.Native.Camera.Stream(-1, -1, 1);
                     }
                     break;
+                case CarLink.MsgSettingsRequest:
+                    SendSettings();
+                    break;
+                case CarLink.MsgMotorTest:
+                    {
+                        int motor, pct, mhold;
+                        if (_car.Drive != null && CarLink.TryDecodeMotorTest(_rx, o, len, out motor, out pct, out mhold))
+                        {
+                            _pendingDrive = false; // a wheel test replaces any drive command in this batch
+                            _car.Drive.DriveMotor(motor, pct / 100.0, mhold); // same deadman / hold limits as driving
+                        }
+                    }
+                    break;
                 case CarLink.MsgSetting:
                     {
                         string kv = Encoding.UTF8.GetString(_rx, o + 1, len - 1);
@@ -280,6 +301,7 @@ namespace MiniRover.Car
                             _car.ApplySettings();
                         }
                         Send(CarLink.EncodeText((ok ? "saved " : "refused ") + kv));
+                        if (ok) SendSettings(); // the app shows what the car actually stored (values are clamped)
                     }
                     break;
                 case CarLink.MsgEyes:
@@ -291,6 +313,15 @@ namespace MiniRover.Car
                     }
                     break;
             }
+        }
+
+        void SendSettings()
+        {
+            string info = "info.firmware=" + Program.FirmwareVersion + "\n"
+                + "info.name=" + _name + "\n"
+                + "info.camera=" + _car.CameraSensor + "\n"
+                + "info.faults=" + _car.Faults + "\n"; // faults are joined with "; ", never line breaks
+            Send(CarLink.EncodeSettings(_car.Settings.Describe() + info));
         }
 
         CarLink.Telemetry BuildTelemetry()

@@ -43,6 +43,7 @@ namespace MiniRover.Protocol
         public const byte MsgTelemetry = 0x10;
         public const byte MsgAck = 0x11;
         public const byte MsgText = 0x12;
+        public const byte MsgSettings = 0x13;   // [UTF-8 "key=value" lines]: every setting + read-only "info.*" keys
 
         // client -> car
         public const byte MsgAuth = 0x02;
@@ -54,6 +55,8 @@ namespace MiniRover.Protocol
         public const byte MsgVideo = 0x25;      // [enable u8][frame size u8][jpeg quality u8][max fps u8]
         public const byte MsgSetting = 0x26;    // [UTF-8 "key=value"]
         public const byte MsgStop = 0x27;       // stop all motors now
+        public const byte MsgSettingsRequest = 0x28; // the car answers with MsgSettings
+        public const byte MsgMotorTest = 0x29;  // [motor u8 0..3][percent i8][holdMs u16]: one wheel (setup / calibration)
 
         public const int TelemetryBytes = 22;
         public const int DriveBytes = 7;
@@ -183,6 +186,35 @@ namespace MiniRover.Protocol
         }
 
         public const int MaxTextBytes = 512;
+        public const int MaxSettingsBytes = 2048;
+
+        /// <summary>The car's settings reply: "key=value" lines.</summary>
+        public static byte[] EncodeSettings(string lines)
+        {
+            byte[] t = Encoding.UTF8.GetBytes(lines ?? "");
+            int len = t.Length > MaxSettingsBytes ? MaxSettingsBytes : t.Length;
+            byte[] b = new byte[1 + len];
+            b[0] = MsgSettings;
+            Array.Copy(t, 0, b, 1, len);
+            return b;
+        }
+
+        public static byte[] EncodeMotorTest(int motor, int percent, int holdMs)
+        {
+            int hold = Clamp(holdMs, 0, 65535);
+            return new byte[] { MsgMotorTest, (byte)Clamp(motor, 0, 3), (byte)(sbyte)Clamp(percent, -100, 100), (byte)hold, (byte)(hold >> 8) };
+        }
+
+        public static bool TryDecodeMotorTest(byte[] b, int offset, int length, out int motor, out int percent, out int holdMs)
+        {
+            motor = percent = holdMs = 0;
+            if (b == null || offset < 0 || length < 5 || b.Length - offset < 5 || b[offset] != MsgMotorTest) return false;
+            motor = b[offset + 1];
+            if (motor > 3) return false;
+            percent = Clamp((sbyte)b[offset + 2], -100, 100);
+            holdMs = b[offset + 3] | (b[offset + 4] << 8);
+            return true;
+        }
 
         static byte[] EncodeUtf8(byte type, string text)
         {

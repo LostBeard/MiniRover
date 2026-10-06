@@ -46,10 +46,47 @@ namespace MiniRover.Car
         // The FNK0053 head holds the sensor upside down: a true 180-degree rotation (flip + mirror) makes it upright and
         // unmirrored. Verified on the real car by panning: at pan 160 (camera turned left) the scene moved right.
         public bool CameraMirror { get => GetDouble("camera.mirror", 1) != 0; set => Set("camera.mirror", value ? 1 : 0); }
+        public bool CameraFlip { get => GetDouble("camera.flip", 1) != 0; set => Set("camera.flip", value ? 1 : 0); }
+
         /// <summary>The local HTTP test API (curl drive/servo/led routes). Off by default: HTTP on the LAN is not paired.</summary>
         public bool HttpApi { get => GetDouble("http.api", 0) != 0; set => Set("http.api", value ? 1 : 0); }
 
-        public bool CameraFlip { get => GetDouble("camera.flip", 1) != 0; set => Set("camera.flip", value ? 1 : 0); }
+        /// <summary>The current value of a client key as text ("" for an unknown key).</summary>
+        public string ValueOf(string key)
+        {
+            switch (key)
+            {
+                case "pan.trim": return Num(PanTrim);
+                case "tilt.trim": return Num(TiltTrim);
+                case "battery.coef": return Num(BatteryCoefficient);
+                case "drive.limit": return Num(SpeedLimit);
+                case "motor.minduty": return MotorMinimumDuty.ToString();
+                case "led.brightness": return LedBrightness.ToString();
+                case "camera.size": return CameraSize.ToString();
+                case "camera.quality": return CameraQuality.ToString();
+                case "camera.fps": return CameraMaxFps.ToString();
+                case "camera.mirror": return CameraMirror ? "1" : "0";
+                case "camera.flip": return CameraFlip ? "1" : "0";
+                case "http.api": return HttpApi ? "1" : "0";
+            }
+            if (key.Length >= 11 && key.StartsWith("motor") && key[5] >= '0' && key[5] <= '3')
+            {
+                int m = key[5] - '0';
+                if (key.Substring(6) == ".invert") return GetMotorInverted(m) ? "1" : "0";
+                if (key.Substring(6) == ".gain") return Num(GetMotorGain(m));
+            }
+            return "";
+        }
+
+        /// <summary>Every client key as "key=value" lines (the app's Settings page reads this).</summary>
+        public string Describe()
+        {
+            var sb = new StringBuilder();
+            foreach (string key in ClientKeys) sb.Append(key).Append('=').Append(ValueOf(key)).Append('\n');
+            return sb.ToString();
+        }
+
+        static string Num(double v) => v.ToString("F3");
 
         /// <summary>Why the last WiFi connection attempt failed (shown to the app in setup mode).</summary>
         public string LastWifiError { get => GetString("wifi.error", ""); set => SetString("wifi.error", value); }

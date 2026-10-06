@@ -61,6 +61,9 @@ public sealed class CarConnection : IAsyncDisposable
     public event Action<CarLink.Telemetry>? OnTelemetry;
     public event Action<IRTCDataChannel>? OnVideoChannel;
     public event Action<string>? OnText;
+    /// <summary>The car's settings and info (after <see cref="RequestSettings"/>, and after every accepted change).</summary>
+    public event Action<CarSettings>? OnSettings;
+    public CarSettings? LastSettings { get; private set; }
     /// <summary>The link dropped after it was up. Create a new connection to reconnect.</summary>
     public event Action? OnDisconnected;
 
@@ -145,6 +148,11 @@ public sealed class CarConnection : IAsyncDisposable
                 case CarLink.MsgText:
                     OnText?.Invoke(System.Text.Encoding.UTF8.GetString(m, 1, m.Length - 1));
                     break;
+                case CarLink.MsgSettings:
+                    var settings = CarSettings.Parse(System.Text.Encoding.UTF8.GetString(m, 1, m.Length - 1));
+                    LastSettings = settings;
+                    OnSettings?.Invoke(settings);
+                    break;
             }
         }
         catch (Exception ex)
@@ -176,6 +184,12 @@ public sealed class CarConnection : IAsyncDisposable
 
     /// <summary>Changes a car setting ("camera.fps=10"); the car clamps it to a safe range, saves it and answers with a Text.</summary>
     public void Setting(string keyValue) => Send(CarLink.EncodeSetting(keyValue));
+
+    /// <summary>Asks the car for its settings; the answer arrives as <see cref="OnSettings"/>.</summary>
+    public void RequestSettings() => Send([CarLink.MsgSettingsRequest]);
+
+    /// <summary>Spins one wheel (0..3) for <paramref name="holdMs"/> (setup and calibration). The car's deadman applies.</summary>
+    public void MotorTest(int motor, int percent, int holdMs = 600) => Send(CarLink.EncodeMotorTest(motor, percent, holdMs));
 
     public void Leds(byte r, byte g, byte b) => Send([CarLink.MsgLeds, r, g, b]);
 

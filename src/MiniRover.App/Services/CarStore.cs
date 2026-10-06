@@ -12,6 +12,12 @@ public sealed class SavedCar
     public string LastIp { get; set; } = "";
     public string Firmware { get; set; } = "";
     public DateTime PairedUtc { get; set; }
+
+    // Driving feel, per car and per browser (the car's own top speed is a car setting).
+    public double SteerGain { get; set; } = 0.8;
+    public double Expo { get; set; } = 0.35;
+    /// <summary>Signaling server, empty = the default (SpawnDev hub). A LAN server (MiniRover.Server) goes here.</summary>
+    public string TrackerUrl { get; set; } = "";
 }
 
 /// <summary>Paired cars, kept in this browser's localStorage.</summary>

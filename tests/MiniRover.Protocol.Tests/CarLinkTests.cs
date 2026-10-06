@@ -161,3 +161,26 @@ public class CarLinkOffsetDecodeTests
         Assert.False(CarLink.TryDecodeDrive(rx, -1, frame.Length, out _, out _, out _, out _));
     }
 }
+
+public class CarLinkSettingsTests
+{
+    [Fact]
+    public void Motor_test_round_trips_and_rejects_bad_motors()
+    {
+        byte[] b = CarLink.EncodeMotorTest(2, -40, 500);
+        Assert.True(CarLink.TryDecodeMotorTest(b, 0, b.Length, out int m, out int p, out int h));
+        Assert.Equal((2, -40, 500), (m, p, h));
+        b[1] = 7; // a hostile motor index never reaches the motors
+        Assert.False(CarLink.TryDecodeMotorTest(b, 0, b.Length, out _, out _, out _));
+        Assert.False(CarLink.TryDecodeMotorTest(b, 0, 4, out _, out _, out _));
+    }
+
+    [Fact]
+    public void Settings_reply_is_utf8_lines_and_capped()
+    {
+        byte[] b = CarLink.EncodeSettings("drive.limit=1\ninfo.firmware=0.1.0");
+        Assert.Equal(CarLink.MsgSettings, b[0]);
+        Assert.Equal("drive.limit=1\ninfo.firmware=0.1.0", System.Text.Encoding.UTF8.GetString(b, 1, b.Length - 1));
+        Assert.Equal(1 + CarLink.MaxSettingsBytes, CarLink.EncodeSettings(new string('k', 9000)).Length);
+    }
+}

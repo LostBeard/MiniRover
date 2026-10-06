@@ -70,3 +70,15 @@ html, body {
   .mr-buttons { order: 3; width: 100%; }
   .mr-stick { width: 130px; height: 130px; }
 }
+
+/* Settings panel */
+.mr-settings { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
+.mr-settings section { border: 1px solid var(--mr-border); border-radius: 8px; padding: 0.75rem 1rem; background: var(--mr-surface); }
+.mr-settings h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+.mr-settings label { display: block; margin: 0.5rem 0; }
+.mr-settings select { width: 100%; margin-top: 0.25rem; padding: 0.4rem; background: var(--mr-bg); color: var(--mr-text); border: 1px solid var(--mr-border); border-radius: 6px; }
+.mr-check { display: flex !important; gap: 0.5rem; align-items: center; }
+.mr-row { display: flex; gap: 0.5rem; align-items: center; }
+.mr-wheel { display: grid; grid-template-columns: 6.5rem auto auto; gap: 0.25rem 0.75rem; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--mr-border); }
+.mr-wheel-name { font-weight: 600; }
+.mr-wheel-gain { grid-column: 1 / -1; margin: 0 !important; }

@@ -38,9 +38,14 @@
             <UiButton Secondary="@(!_lights)" OnClick="ToggleLights" data-test="btn-lights">Lights</UiButton>
             <UiButton Secondary="true" OnClick="CenterCamera" data-test="btn-center">Center camera</UiButton>
             <UiButton Secondary="true" OnClick="CycleSpeed" data-test="btn-speed">Speed: @SpeedName</UiButton>
+            <UiButton Secondary="@(!_showSettings)" OnClick="@(() => _showSettings = !_showSettings)" data-test="btn-settings">Settings</UiButton>
         </div>
         <Stick Label="Camera" TestId="stick-camera" SpringBack="false" OnMove="OnCameraStick" />
     </div>
+    @if (_showSettings && _link != null && _state == "connected")
+    {
+        <CarSettingsPanel Link="_link" Car="Car" Volts="@(_t == null ? null : _t.BatteryMillivolts / 1000.0)" OnLocalChanged="ApplyDrivingFeel" />
+    }
     <p class="mr-muted mr-keys">Keyboard: W A S D or arrows to drive, Space horn, L lights, C center camera. Gamepad: left stick or triggers to drive, right stick aims the camera, A horn, Y lights, B center.</p>
 </div>
 
@@ -82,8 +87,18 @@
     string WifiClass => _t == null || WifiSignal.Bars(_t.Rssi) < 0 ? "mr-muted" : WifiSignal.Bars(_t.Rssi) switch { 0 => "mr-error", 1 => "mr-warn", _ => "mr-ok" };
     string LineText => _t == null ? "-" : $"{((_t.Line & 1) != 0 ? "#" : "_")}{((_t.Line & 2) != 0 ? "#" : "_")}{((_t.Line & 4) != 0 ? "#" : "_")}";
 
+    bool _showSettings;
+
+    /// <summary>Per-car steering sensitivity and stick curve (Settings page).</summary>
+    void ApplyDrivingFeel()
+    {
+        _mixer.SteerGain = Car.SteerGain;
+        _mixer.Expo = Car.Expo;
+    }
+
     protected override void OnInitialized()
     {
+        ApplyDrivingFeel();
         _window = JS.Get<Window>("window");
         _window.OnKeyDown += OnKeyDown;
         _window.OnKeyUp += OnKeyUp;
@@ -103,7 +118,7 @@
             attempt++;
             try
             {
-                _link = CarConnection.FromKeyHex(Car.RoomKeyHex);
+                _link = CarConnection.FromKeyHex(Car.RoomKeyHex, string.IsNullOrWhiteSpace(Car.TrackerUrl) ? null : Car.TrackerUrl);
                 _link.OnStatus += s => { if (_state != "connected") { _status = s; _ = InvokeAsync(StateHasChanged); } };
                 _link.OnTelemetry += t => { _t = t; _frames++; };
                 _link.OnVideoChannel += ch => { _video = ch; _ = InvokeAsync(StateHasChanged); };

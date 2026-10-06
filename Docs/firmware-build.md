@@ -71,10 +71,28 @@ If you change the target's defconfig or sdkconfig, delete `nf-interpreter\sdkcon
 
 The C# projects under `firmware/` are nanoFramework 2.0 projects. Build them with the preview nanoFramework extension for Visual Studio 2026, or from the command line with MSBuild and the extension's MSBuild files. Packages restore from nuget.org with `nuget restore firmware\MiniRover.Car\packages.config -PackagesDirectory firmware\packages`.
 
-Deploy and watch the debug output with:
+### Deploying the app (fast, no debugger)
+
+The build writes `firmware\MiniRover.Car\bin\Debug\MiniRover.Car.bin`, the app's complete deployment image. Write it
+straight to the car's `deploy` partition:
+
+```
+powershell -ExecutionPolicy Bypass -File firmware\deploy-app.ps1 -Port COM8
+```
+
+This takes about 4 seconds (a debugger deploy takes minutes at the kit's 460800 baud) and works even when the
+debugger cannot attach. The car restarts. Settings, the pairing key and WiFi credentials are in other partitions and
+are kept. It uses esptool from PATH or the copy that comes with `nanoff`.
+
+### Deploying with the debugger, and watching the log
 
 ```
 dotnet run tools/nf-deploy.cs firmware/MiniRover.Car/bin/Debug COM8 30
+minirover monitor COM8 60
 ```
 
-(`NF_DEBUG_LIBRARY` must point at the preview extension's `nanoFramework.Tools.DebugLibrary.Net.dll`.)
+(`NF_DEBUG_LIBRARY` must point at the preview extension's `nanoFramework.Tools.DebugLibrary.Net.dll`.) `nf-deploy`
+restarts the CLR held for the debugger before it writes, so the old app's native tasks are not running.
+
+If the debugger stops finding the device ("found no device" / "Couldn't connect") while the car otherwise works,
+unplugging and replugging the USB cable is the first thing to try; `deploy-app.ps1` still works meanwhile.

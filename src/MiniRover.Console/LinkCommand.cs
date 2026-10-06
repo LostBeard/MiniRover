@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using MiniRover.Client;
 using MiniRover.Protocol;
@@ -51,6 +52,11 @@ static class LinkCommand
                 case "--car": carName = args[++i]; break;
                 case "--key": keyHex = args[++i]; break;
                 case "--tracker": tracker = args[++i]; break;
+                case "--trace":
+                    // SipSorcery's own log (ICE, DTLS, SCTP) on the console, to see the desktop side of a link problem.
+                    SIPSorcery.LogFactory.Set(Microsoft.Extensions.Logging.LoggerFactory.Create(b =>
+                        b.AddSimpleConsole(o => o.TimestampFormat = "HH:mm:ss.fff ").SetMinimumLevel(LogLevel.Debug)));
+                    break;
                 default: script.Add(args[i]); break;
             }
         }

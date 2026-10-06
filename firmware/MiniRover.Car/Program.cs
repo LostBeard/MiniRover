@@ -52,16 +52,16 @@ namespace MiniRover.Car
             {
                 Step(car, "ble", ble.Start);
             }
+            BleWindow window = null;
             if (announce)
             {
+                window = new BleWindow(ble);
                 Step(car, "ble window", () =>
                 {
                     new Thread(() =>
                     {
                         Thread.Sleep(Protocol.BleSetup.ConnectedAdvertiseSeconds * 1000);
-                        ble.Stop();
-                        System.Diagnostics.Debug.WriteLine("BLE setup window closed");
-                        DisableModemSleep();
+                        window.Close("timeout");
                     }).Start();
                 });
             }
@@ -71,6 +71,9 @@ namespace MiniRover.Car
             if (wifi.Connected)
             {
                 link = new RtcLinkService(car, settings, wifi.SetupSsid);
+                // An app that connects needs no BLE: close the window at once and give its memory to the session
+                // (measured: 6-7 KB of internal RAM left with a session up inside the window, 30 KB after it).
+                if (window != null) link.OnAppConnected = () => window.Close("app connected");
                 Step(car, "link", link.Start);
             }
 
@@ -122,6 +125,28 @@ namespace MiniRover.Car
         }
 
         delegate void StepAction();
+
+        /// <summary>The BLE setup window after boot: closes once, on its timer or when an app connects.</summary>
+        sealed class BleWindow
+        {
+            readonly BleSetupService _ble;
+            readonly object _lock = new object();
+            bool _closed;
+
+            public BleWindow(BleSetupService ble) => _ble = ble;
+
+            public void Close(string reason)
+            {
+                lock (_lock)
+                {
+                    if (_closed) return;
+                    _closed = true;
+                }
+                _ble.Stop();
+                System.Diagnostics.Debug.WriteLine("BLE setup window closed (" + reason + ")");
+                DisableModemSleep();
+            }
+        }
 
         static void Step(Car car, string name, StepAction action)
         {
