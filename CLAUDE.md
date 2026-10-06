@@ -5,6 +5,7 @@ Read [PLANS.md](PLANS.md) first; it is the roadmap and status. Hardware facts ar
 ## Ground rules for this repo
 
 - **Public, generic project.** Code, docs and defaults must work for any FNK0053 owner. No personal network names, room keys, credentials or machine paths in committed files.
+- **Do not copy Freenove code or artwork.** Freenove's repository is CC BY-NC-SA 3.0, which is incompatible with MIT. Hardware facts (pins, addresses, wiring, register behaviour) are fine to use and cite; sketches, library code, LED-matrix tables and images are not. Write MiniRover's own.
 - **Never commit secrets.** WiFi credentials and pairing keys live on the car (setup page) or in git-ignored `*.local.*` files.
 - **Safety is firmware-side.** The deadman stop, battery cutoff and speed limit must not depend on the client behaving.
 - **Video bytes never enter a managed heap.** The camera task in native firmware code sends frames directly; in the browser, frames stay in JavaScript and GPU memory. No `ToArray()` / `byte[]` staging of frames.
