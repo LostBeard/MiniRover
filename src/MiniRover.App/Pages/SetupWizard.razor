@@ -1,0 +1,247 @@
+@implements IAsyncDisposable
+@inject SpawnJSRuntime JS
+@inject CarStore Cars
+
+<UiCard Title="Add a car">
+    <div data-test="setup-step" data-step="@_step">
+    @switch (_step)
+    {
+        case Step.Start:
+            @if (!_supported)
+            {
+                <p data-test="setup-nobt">This browser has no Web Bluetooth (Firefox and iPhone Safari do not support it).</p>
+                <p>Use Chrome or Edge on Windows, macOS, ChromeOS or Android, or set the car up over WiFi instead:
+                   join the WiFi network <b>MiniRover-XXXX</b> the car creates, then open <b>http://192.168.4.1</b>.</p>
+            }
+            else
+            {
+                <p>Turn the car on (batteries in, power switch on). A car that has not been set up shows a square
+                   "setup" pattern on its LED eyes and waits for you here.</p>
+                <UiButton OnClick="Find" data-test="setup-find">Find my car</UiButton>
+            }
+            break;
+
+        case Step.Code:
+            <p>Connected to <b>@_ble.Name</b> (firmware @Info("fw")).</p>
+            <p>The car is showing a 4-digit code on its LED eyes. Type it here to prove you are next to it.</p>
+            <UiStack Horizontal="true" Gap="0.5rem">
+                <UiInput @bind-Value="_code" inputmode="numeric" maxlength="4" placeholder="0000" data-test="setup-code" />
+                <UiButton OnClick="SubmitCode" data-test="setup-code-submit">Continue</UiButton>
+                <UiButton Secondary="true" OnClick="NewCode">New code</UiButton>
+            </UiStack>
+            break;
+
+        case Step.Network:
+            @if (_scanning)
+            {
+                <p data-test="setup-scanning">The car is looking for WiFi networks (about 15 seconds)...</p>
+                <UiProgressBar Indeterminate="true" />
+            }
+            else
+            {
+                @if (!string.IsNullOrEmpty(Info("wifiError")))
+                {
+                    <p class="mr-warn" data-test="setup-wifi-error">Last attempt: @Info("wifiError")</p>
+                }
+                <p>Choose the network the car should join (2.4 GHz only).</p>
+                <div class="mr-networks" data-test="setup-networks">
+                    @foreach (var n in _networks)
+                    {
+                        <button class="@(n.Ssid == _ssid ? "mr-net mr-net-on" : "mr-net")" @onclick="@(() => _ssid = n.Ssid)">
+                            <span>@n.Ssid</span><span class="mr-muted">@Bars(n.Rssi)</span>
+                        </button>
+                    }
+                </div>
+                <UiStack Gap="0.5rem">
+                    <UiInput @bind-Value="_ssid" placeholder="Network name" data-test="setup-ssid" />
+                    <UiInput @bind-Value="_password" type="password" placeholder="Password (empty for an open network)" data-test="setup-password" />
+                    <UiStack Horizontal="true" Gap="0.5rem">
+                        <UiButton OnClick="SendNetwork" data-test="setup-send">Connect the car</UiButton>
+                        <UiButton Secondary="true" OnClick="Scan">Scan again</UiButton>
+                    </UiStack>
+                </UiStack>
+            }
+            break;
+
+        case Step.Joining:
+            <p data-test="setup-joining">@_status</p>
+            <UiProgressBar Indeterminate="true" />
+            break;
+
+        case Step.Done:
+            <p data-test="setup-done">Done. <b>@_ble.Name</b> is on <b>@Info("ssid")</b> at @Info("ip") and paired with this browser.</p>
+            <UiButton OnClick="OnDone">Go to my cars</UiButton>
+            break;
+    }
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <p class="mr-error" data-test="setup-error">@_error</p>
+    }
+    </div>
+</UiCard>
+
+@code {
+    [Parameter] public EventCallback OnDone { get; set; }
+
+    enum Step { Start, Code, Network, Joining, Done }
+    Step _step = Step.Start;
+
+    CarSetupBle _ble = null!;
+    bool _supported;
+    Dictionary<string, string> _info = new();
+    string _code = "";
+    bool _scanning;
+    List<WifiNetwork> _networks = new();
+    string _ssid = "", _password = "", _status = "", _error = "";
+
+    protected override void OnInitialized()
+    {
+        _ble = new CarSetupBle(JS);
+        _supported = CarSetupBle.IsSupported(JS);
+    }
+
+    string Info(string key) => _info.TryGetValue(key, out var v) ? v : "";
+
+    static string Bars(int rssi) => rssi >= -55 ? "▂▄▆█" : rssi >= -67 ? "▂▄▆" : rssi >= -78 ? "▂▄" : "▂";
+
+    async Task Find()
+    {
+        // Called straight from the click: RequestDevice needs the user gesture.
+        await Run(async () =>
+        {
+            await _ble.PickAndConnectAsync();
+            _info = await _ble.ReadInfoAsync();
+            await _ble.RequestCodeAsync();
+            _code = "";
+            _step = Step.Code;
+        });
+    }
+
+    Task NewCode() => Run(async () =>
+    {
+        await _ble.RequestCodeAsync();
+        _code = "";
+    });
+
+    Task SubmitCode() => Run(async () =>
+    {
+        var (ok, left) = await _ble.SubmitCodeAsync(_code);
+        if (!ok)
+        {
+            _error = left < 0 ? "Type the 4 digits shown on the car." :
+                     left == 0 ? "That was not it. The car is showing a new code." :
+                     $"That was not it ({left} tries left).";
+            _code = "";
+            return;
+        }
+
+        // Pair first: from here on this browser can reach the car even if the WiFi step is abandoned.
+        var (key, name) = await _ble.GetPairingAsync();
+        Cars.Save(new SavedCar
+        {
+            Name = name,
+            RoomKeyHex = Convert.ToHexString(key).ToLowerInvariant(),
+            Firmware = Info("fw"),
+            LastIp = Info("state") == "connected" ? Info("ip") : "",
+            PairedUtc = DateTime.UtcNow,
+        });
+
+        _step = Step.Network;
+        await ScanCore();
+    });
+
+    Task Scan() => Run(ScanCore);
+
+    async Task ScanCore()
+    {
+        _scanning = true;
+        StateHasChanged();
+        try
+        {
+            _networks = await _ble.ScanAsync();
+            if (_ssid.Length == 0 && _networks.Count > 0) _ssid = _networks[0].Ssid;
+        }
+        finally
+        {
+            _scanning = false;
+        }
+    }
+
+    Task SendNetwork() => Run(async () =>
+    {
+        if (_ssid.Trim().Length == 0)
+        {
+            _error = "Choose or type a network name.";
+            return;
+        }
+        await _ble.SetWifiAsync(_ssid.Trim(), _password);
+        _step = Step.Joining;
+        _status = "The car is restarting to join " + _ssid.Trim() + "...";
+        StateHasChanged();
+        await WaitForCarAsync();
+    });
+
+    /// <summary>After SetWifi the car reboots: reconnect to the same device and read where it ended up.</summary>
+    async Task WaitForCarAsync()
+    {
+        DateTime giveUp = DateTime.UtcNow.AddSeconds(90);
+        await Task.Delay(6000);
+        while (DateTime.UtcNow < giveUp)
+        {
+            try
+            {
+                await _ble.ConnectAsync();
+                _info = await _ble.ReadInfoAsync();
+                if (Info("state") == "connected")
+                {
+                    foreach (var car in Cars.GetAll().Where(c => c.Name == _ble.Name))
+                    {
+                        car.LastIp = Info("ip");
+                        Cars.Save(car);
+                    }
+                    await _ble.FinishAsync();
+                    _step = Step.Done;
+                    return;
+                }
+                if (Info("state") == "setup")
+                {
+                    // Could not join: the car is back in setup mode. A reboot drops the code check, so ask again.
+                    _error = string.IsNullOrEmpty(Info("wifiError")) ? "The car could not join that network." : Info("wifiError");
+                    await _ble.RequestCodeAsync();
+                    _code = "";
+                    _step = Step.Code;
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                _status = "Waiting for the car to come back (" + ex.Message + ")...";
+                StateHasChanged();
+            }
+            await Task.Delay(3000);
+        }
+        _error = "The car did not come back. If its eyes show the setup pattern, find it again and check the WiFi password.";
+        _step = Step.Start;
+    }
+
+    async Task Run(Func<Task> action)
+    {
+        _error = "";
+        try
+        {
+            await action();
+        }
+        catch (CarSetupException ex)
+        {
+            _error = "The car says: " + ex.Message;
+        }
+        catch (Exception ex)
+        {
+            // Includes the user closing the device picker (NotFoundError).
+            _error = ex.Message;
+        }
+    }
+
+    public ValueTask DisposeAsync() => _ble.DisposeAsync();
+}

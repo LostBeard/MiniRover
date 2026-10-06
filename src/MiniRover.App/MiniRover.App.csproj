@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <!-- Standalone .NET WebAssembly app. The BlazorWebAssembly SDK is used to compile .razor files and publish;
+       the page runs on SpawnDev.SpawnJS.RazorRenderer (no Blazor JavaScript runtime). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MiniRover.App</RootNamespace>
+    <CompressionEnabled>false</CompressionEnabled>
+    <WasmEnableHotReload>false</WasmEnableHotReload>
+    <!-- Not a Blazor-runtime app: build the SpawnJS classic bundle (main.classic.js) that index.html loads.
+         The BlazorWebAssembly SDK would otherwise switch SpawnJS.WebWorkers to its Blazor boot path. -->
+    <SpawnJSWebWorkersBlazor>false</SpawnJSWebWorkersBlazor>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SpawnDev.SpawnJS" Version="3.0.2" />
+    <PackageReference Include="SpawnDev.SpawnJS.RazorRenderer" Version="2.2.1" />
+    <PackageReference Include="SpawnDev.SpawnJS.RazorUI" Version="2.2.1" />
+    <!-- Required in the exe project: its build targets produce main.classic.js. -->
+    <PackageReference Include="SpawnDev.SpawnJS.WebWorkers" Version="2.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MiniRover.Protocol\MiniRover.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

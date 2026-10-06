@@ -97,7 +97,9 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [ ] `MiniRover.Console` drives the real car; hardware-in-the-loop tests
 
 ### Phase 4 - Browser app
-- [ ] Connect / pair / multiple cars / auto-reconnect
+- [x] App scaffold: SpawnJSAppBuilder + RazorRenderer + RazorUI (dark theme), garage of paired cars (localStorage)
+- [x] BLE setup wizard (Web Bluetooth): find car, code check, network scan/choice, pairing key, WiFi hand-off, reconnect after reboot. Verified end to end in Chrome against the real car (`minirover webtest`); WiFi hand-off itself not yet run with a real network
+- [ ] Connect over WebRTC / multiple cars / auto-reconnect
 - [ ] Drive page: full-screen video, HUD (battery, link RTT, WiFi signal, fps, distance, line sensors, speed limit)
 - [ ] Touch dual sticks (pointer events), gamepad (polled per frame, standard mapping, rumble), keyboard
 - [ ] Lights, LED-matrix eyes and text, buzzer

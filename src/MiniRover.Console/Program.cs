@@ -4,6 +4,15 @@ using MiniRover.ConsoleApp;
 // minirover setup [--name <prefix>] [--code <4 digits> | --code-from-debug <COMx>] [--scan] [--pairing] [--wifi <ssid> <password>]
 // With no --code options the code shown on the car's LED eyes is asked for on the console.
 
+// minirover webtest <publish wwwroot> <COMx> [httpPort] [cdpPort] [screenshotDir]
+if (args.Length >= 3 && args[0] == "webtest")
+{
+    return await WebTest.RunAsync(args[1], args[2],
+        args.Length > 3 ? int.Parse(args[3]) : 8640,
+        args.Length > 4 ? int.Parse(args[4]) : 9240,
+        args.Length > 5 ? args[5] : Path.Combine(Path.GetTempPath(), "minirover-webtest-shots"));
+}
+
 if (args.Length == 0 || args[0] != "setup")
 {
     Console.WriteLine("usage: minirover setup [--name MiniRover] [--code 1234 | --code-from-debug COM8] [--scan] [--pairing] [--wifi <ssid> <password>]");

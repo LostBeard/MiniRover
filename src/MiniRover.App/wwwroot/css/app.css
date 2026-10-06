@@ -1,0 +1,41 @@
+:root {
+  --mr-bg: #0f1216;
+  --mr-surface: #171b21;
+  --mr-text: #e8ecf1;
+  --mr-muted: #8b95a3;
+  --mr-accent: #4fb3ff;
+  --mr-warn: #f2b84b;
+  --mr-error: #ff6b6b;
+  --mr-border: #2a313b;
+}
+
+html, body {
+  margin: 0;
+  background: var(--mr-bg);
+  color: var(--mr-text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.mr-shell { max-width: 46rem; margin: 0 auto; padding: 0 16px; min-height: 100vh; display: flex; flex-direction: column; }
+.mr-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 0; flex-wrap: wrap; }
+.mr-header nav { display: flex; gap: 0.5rem; }
+.mr-logo { font-weight: 700; font-size: 1.3rem; letter-spacing: 0.02em; }
+.mr-main { flex: 1; }
+.mr-footer { color: var(--mr-muted); font-size: 0.85rem; padding: 2rem 0 1rem; }
+.mr-footer a { color: var(--mr-accent); }
+
+.mr-muted { color: var(--mr-muted); font-size: 0.9rem; }
+.mr-warn { color: var(--mr-warn); }
+.mr-error { color: var(--mr-error); }
+
+.mr-car { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 0; border-bottom: 1px solid var(--mr-border); }
+.mr-car-name { font-weight: 600; }
+
+.mr-networks { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.5rem 0 1rem; max-height: 16rem; overflow-y: auto; }
+.mr-net {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.55rem 0.75rem; border-radius: 8px; border: 1px solid var(--mr-border);
+  background: var(--mr-surface); color: var(--mr-text); font: inherit; text-align: left; cursor: pointer;
+}
+.mr-net:hover { border-color: var(--mr-accent); }
+.mr-net-on { border-color: var(--mr-accent); box-shadow: 0 0 0 1px var(--mr-accent) inset; }

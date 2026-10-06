@@ -1,0 +1,43 @@
+@inject CarStore Cars
+@inject RazorUITheme Theme
+
+<div class="mr-shell">
+    <header class="mr-header">
+        <span class="mr-logo" data-test="app-title">MiniRover</span>
+        <nav>
+            <UiButton Secondary="@(_view != View.Garage)" OnClick="@(() => Show(View.Garage))" data-test="nav-garage">My cars</UiButton>
+            <UiButton Secondary="@(_view != View.Setup)" OnClick="@(() => Show(View.Setup))" data-test="nav-setup">Add a car</UiButton>
+        </nav>
+    </header>
+
+    <main class="mr-main">
+        @if (_view == View.Garage)
+        {
+            <Garage OnAddCar="@(() => Show(View.Setup))" />
+        }
+        else
+        {
+            <SetupWizard OnDone="@(() => Show(View.Garage))" />
+        }
+    </main>
+
+    <footer class="mr-footer">
+        Open-source software for the Freenove FNK0053 4WD car kit. Not affiliated with Freenove.
+        <a href="https://github.com/LostBeard/MiniRover" target="_blank" rel="noopener">Source</a>
+    </footer>
+</div>
+
+@code {
+    enum View { Garage, Setup }
+    View _view;
+
+    protected override void OnInitialized()
+    {
+        // Dark everywhere: the drive view sits on live video, and one theme keeps every page consistent.
+        Theme.SetTheme(RazorUITheme.Dark);
+        // First visit: no cars yet, so go straight to setup.
+        _view = Cars.GetAll().Count == 0 ? View.Setup : View.Garage;
+    }
+
+    void Show(View v) => _view = v;
+}

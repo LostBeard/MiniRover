@@ -1,0 +1,42 @@
+@inject CarStore Cars
+
+<UiCard Title="My cars">
+    @if (_cars.Count == 0)
+    {
+        <p data-test="garage-empty">No cars yet.</p>
+        <UiButton OnClick="OnAddCar" data-test="garage-add">Add a car</UiButton>
+    }
+    else
+    {
+        <UiStack Gap="0.75rem">
+            @foreach (var car in _cars)
+            {
+                <div class="mr-car" data-test="garage-car">
+                    <div>
+                        <div class="mr-car-name">@car.Name</div>
+                        <div class="mr-muted">
+                            @(string.IsNullOrEmpty(car.LastIp) ? "not on WiFi yet" : "last seen at " + car.LastIp)
+                            · firmware @car.Firmware · paired @car.PairedUtc.ToLocalTime().ToString("d")
+                        </div>
+                    </div>
+                    <UiButton Secondary="true" OnClick="@(() => Forget(car))">Forget</UiButton>
+                </div>
+            }
+        </UiStack>
+        <p class="mr-muted">Driving, video and sensors are coming next. Pairing is done, so this car will connect as soon as they land.</p>
+    }
+</UiCard>
+
+@code {
+    [Parameter] public EventCallback OnAddCar { get; set; }
+
+    List<SavedCar> _cars = new();
+
+    protected override void OnInitialized() => _cars = Cars.GetAll().OrderBy(c => c.Name).ToList();
+
+    void Forget(SavedCar car)
+    {
+        Cars.Remove(car.Name);
+        _cars = Cars.GetAll().OrderBy(c => c.Name).ToList();
+    }
+}
