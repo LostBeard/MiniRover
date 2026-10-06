@@ -4,7 +4,7 @@
 @using SpawnDev.SpawnJS.JSObjects
 @inject SpawnJSRuntime JS
 
-<div class="mr-drive" data-test="drive" data-state="@_state">
+<div class="mr-drive" data-test="drive" data-state="@_state" data-reconnects="@Reconnects">
     <div class="mr-drive-top">
         <UiButton Secondary="true" OnClick="Leave" data-test="drive-back">Back</UiButton>
         <span class="mr-car-name">@Car.Name</span>
@@ -91,38 +91,69 @@
         _ = RunAsync();
     }
 
+    /// <summary>
+    /// Connect, drive until the link drops, reconnect: switching the car off and on, a WiFi blip or driving out of range
+    /// and back all recover by themselves. Only a pairing-key failure stops for good (retrying cannot fix it).
+    /// </summary>
     async Task RunAsync()
     {
-        try
+        int attempt = 0;
+        while (!_cts.IsCancellationRequested)
         {
-            _link = CarConnection.FromKeyHex(Car.RoomKeyHex);
-            _link.OnStatus += s => { _status = s; _ = InvokeAsync(StateHasChanged); };
-            _link.OnTelemetry += t => { _t = t; _frames++; };
-            _link.OnDisconnected += () => { _state = "disconnected"; _ = InvokeAsync(StateHasChanged); };
-            _link.OnVideoChannel += ch => { _video = ch; _ = InvokeAsync(StateHasChanged); };
-            _status = "looking for " + Car.Name + "... (is it switched on?)";
-            StateHasChanged();
-            using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token))
+            attempt++;
+            try
             {
-                timeout.CancelAfter(TimeSpan.FromSeconds(90));
-                await _link.ConnectAsync(timeout.Token);
+                _link = CarConnection.FromKeyHex(Car.RoomKeyHex);
+                _link.OnStatus += s => { if (_state != "connected") { _status = s; _ = InvokeAsync(StateHasChanged); } };
+                _link.OnTelemetry += t => { _t = t; _frames++; };
+                _link.OnVideoChannel += ch => { _video = ch; _ = InvokeAsync(StateHasChanged); };
+                _state = attempt == 1 ? "connecting" : "reconnecting";
+                _status = attempt == 1 ? "looking for " + Car.Name + "... (is it switched on?)" : "connection lost, reconnecting to " + Car.Name + "...";
+                StateHasChanged();
+                using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token))
+                {
+                    timeout.CancelAfter(TimeSpan.FromSeconds(90));
+                    await _link.ConnectAsync(timeout.Token);
+                }
+                _state = "connected";
+                _status = attempt == 1 ? "connected" : "connected (reconnected)";
+                Reconnects = attempt - 1;
+                _video = _link.VideoChannel ?? _video;
+                _link.Video(true); // the car's saved size / quality / fps
+                _sentPan = _sentTilt = -1; // resend the camera aim to a car that may have restarted
+                if (_lights) _link.Leds(255, 255, 255);
+                StateHasChanged();
+                await ControlLoop();
             }
-            _state = "connected";
-            _status = "connected";
-            _video ??= _link.VideoChannel;
-            _link.Video(true); // the car's saved size / quality / fps
-            CenterCamera();
-            StateHasChanged();
-            await ControlLoop();
-        }
-        catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
-        catch (Exception ex)
-        {
-            _state = "failed";
-            _status = ex is OperationCanceledException ? "the car did not answer. Is it on and on WiFi?" : ex.Message;
-            StateHasChanged();
+            catch (OperationCanceledException) when (_cts.IsCancellationRequested) { return; }
+            catch (Exception ex) when (ex.Message.Contains("pairing key"))
+            {
+                _state = "failed";
+                _status = ex.Message + ". Pair this car again (Add a car).";
+                StateHasChanged();
+                return;
+            }
+            catch (Exception ex)
+            {
+                _status = ex is OperationCanceledException ? "the car did not answer yet. Is it on and on WiFi? Still trying..." : ex.Message + ", retrying...";
+                StateHasChanged();
+            }
+            finally
+            {
+                // Release the old connection before the next attempt (the car accepts one app at a time).
+                var old = _link;
+                _link = null;
+                _video = null;
+                _wasDriving = false;
+                if (old != null) await old.DisposeAsync();
+            }
+            if (_cts.IsCancellationRequested) return;
+            try { await Task.Delay(1000, _cts.Token); } catch (OperationCanceledException) { return; }
         }
     }
+
+    /// <summary>How many times this page reconnected (shown for tests).</summary>
+    int Reconnects { get; set; }
 
     async Task ControlLoop()
     {
@@ -130,7 +161,7 @@
         var rateClock = System.Diagnostics.Stopwatch.StartNew();
         while (await timer.WaitForNextTickAsync(_cts.Token))
         {
-            if (_link == null || !_link.IsConnected) { _state = "disconnected"; StateHasChanged(); return; }
+            if (_link == null || !_link.IsConnected) { _state = "reconnecting"; StateHasChanged(); return; }
             var (throttle, steer, camX, camY) = ReadInputs();
 
             _mixer.SpeedLimit = Speeds[_speed].Limit;
@@ -301,6 +332,9 @@
     {
         if (_disposed) return;
         _disposed = true;
+        // Stop the car first: cancelling can run the connect loop's cleanup at once and release the link.
+        var link = _link;
+        try { if (link?.IsConnected == true) { link.Stop(); link.Video(false); } } catch { }
         _cts.Cancel();
         if (_window != null)
         {
@@ -309,10 +343,6 @@
             _window.OnBlur -= OnBlur;
             _window.Dispose();
         }
-        if (_link != null)
-        {
-            try { if (_link.IsConnected) { _link.Stop(); _link.Video(false); } } catch { }
-            await _link.DisposeAsync();
-        }
+        if (link != null) await link.DisposeAsync(); // idempotent: the loop's cleanup may have done it already
     }
 }

@@ -115,7 +115,8 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [x] App scaffold: SpawnJSAppBuilder + RazorRenderer + RazorUI (dark theme), garage of paired cars (localStorage)
 - [x] BLE setup wizard (Web Bluetooth): find car, code check, network scan/choice, pairing key, WiFi hand-off, reconnect after reboot. Verified end to end in Chrome against the real car (`minirover webtest`); WiFi hand-off itself not yet run with a real network
 - [x] Connect over WebRTC from the garage (Drive button)
-- [ ] Auto-reconnect after a drop; several cars at once
+- [x] Auto-reconnect: the drive page notices a car restart in 2.5-4.6 s and is back 7-11 s after it, video included (`drivetest --reboot COM8` restarts the car mid-test)
+- [ ] Several cars at once
 - [x] Drive page HUD: battery % (Li-ion curve) + volts, WiFi signal bars + dBm with an out-of-range warning, line + light sensors, telemetry rate, car memory
 - [x] Drive page video: canvas, browser JPEG decode, newest frame wins, bytes never enter .NET; HUD shows the car's video fps
 - [ ] Drive page: link RTT, distance, full screen + wake lock

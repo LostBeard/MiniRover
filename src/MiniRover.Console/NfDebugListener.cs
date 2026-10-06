@@ -55,6 +55,18 @@ public sealed class NfDebugListener : IDisposable
         }
     }
 
+    /// <summary>Restarts the car's CLR (managed program) over the wire protocol: to the app this looks like the car
+    /// restarting, which is what reconnect tests need. Native state survives (that is what soft reboot means).</summary>
+    public bool RebootClr()
+    {
+        if (_engine == null) return false;
+        Type engineType = _engine.GetType();
+        Type? options = engineType.Assembly.GetType("nanoFramework.Tools.Debugger.RebootOptions");
+        MethodInfo? reboot = options == null ? null : engineType.GetMethod("RebootDevice", [options, typeof(IProgress<string>)]);
+        if (reboot == null) return false;
+        return (bool)reboot.Invoke(_engine, [Enum.ToObject(options!, 2 /* ClrOnly */), null])!;
+    }
+
     public void Dispose()
     {
         try { _engine?.GetType().GetMethod("Stop", Type.EmptyTypes)?.Invoke(_engine, null); } catch { }

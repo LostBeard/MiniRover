@@ -15,7 +15,7 @@ namespace MiniRover.ConsoleApp;
 /// </summary>
 public static class DriveTest
 {
-    public static async Task<int> RunAsync(string webRoot, int httpPort, int cdpPort, string shotDir)
+    public static async Task<int> RunAsync(string webRoot, int httpPort, int cdpPort, string shotDir, string? rebootPort = null)
     {
         if (!File.Exists(Path.Combine(webRoot, "index.html"))) throw new FileNotFoundException("publish the app first", Path.Combine(webRoot, "index.html"));
         var (name, keyHex) = CarKeys.Load().LastOrDefault();
@@ -100,6 +100,25 @@ public static class DriveTest
             sw.Restart();
             await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "0", TimeSpan.FromSeconds(3), "the car to report stopped after key up");
             Console.WriteLine($"PASS key up: car reports stopped after {sw.ElapsedMilliseconds} ms");
+
+            // Reconnect: restart the car's program over USB (looks like a car restart to the app) and expect the page to
+            // come back by itself, video included.
+            if (rebootPort != null)
+            {
+                using (var dbg = NfDebugListener.Attach(rebootPort))
+                {
+                    if (!dbg.RebootClr()) throw new Exception("FAIL could not restart the car over " + rebootPort);
+                }
+                sw.Restart();
+                await WaitForAsync(cdp, "[data-test=drive][data-state=reconnecting]", TimeSpan.FromSeconds(60), "the page to notice the car went away");
+                Console.WriteLine($"PASS car restarted: page shows reconnecting after {sw.ElapsedMilliseconds} ms");
+                await WaitForAsync(cdp, "[data-test=drive][data-state=connected][data-reconnects='1']", TimeSpan.FromSeconds(150), "the page to reconnect");
+                long back = sw.ElapsedMilliseconds;
+                int before = await WaitForIntAsync(cdp, "[data-test=drive-video]", "data-frames", v => v > 0, "video after reconnect");
+                await Task.Delay(5000);
+                int after = await WaitForIntAsync(cdp, "[data-test=drive-video]", "data-frames", v => v > before, "video frames after reconnect");
+                Console.WriteLine($"PASS reconnected {back} ms after the restart; video running again ({(after - before) / 5.0:F1} fps)");
+            }
 
             await ClickAsync(cdp, "[data-test=btn-horn]");
             await ClickAsync(cdp, "[data-test=drive-back]");

@@ -7,6 +7,14 @@ using MiniRover.ConsoleApp;
 // minirover link [--car name] [--key hex] ["drive 40 40 1000; servo 90 120; ..."]   (see LinkCommand.cs)
 if (args.Length >= 1 && args[0] == "link") return await LinkCommand.RunAsync(args);
 
+// minirover reboot <COMx>   restart the car's program (CLR) over USB, as if it had restarted
+if (args.Length >= 2 && args[0] == "reboot")
+{
+    using var dbgReboot = NfDebugListener.Attach(args[1]);
+    Console.WriteLine(dbgReboot.RebootClr() ? "car program restarting" : "reboot not supported by this debugger library");
+    return 0;
+}
+
 // minirover monitor <COMx> [seconds]   print the car's debug output (Debug.WriteLine, exceptions)
 if (args.Length >= 2 && args[0] == "monitor")
 {
@@ -17,13 +25,14 @@ if (args.Length >= 2 && args[0] == "monitor")
     return 0;
 }
 
-// minirover drivetest <publish wwwroot> [httpPort] [cdpPort] [screenshotDir]   (THE WHEELS MUST BE OFF THE GROUND)
+// minirover drivetest <publish wwwroot> [httpPort] [cdpPort] [screenshotDir] [--reboot COMx]   (THE WHEELS MUST BE OFF THE GROUND)
 if (args.Length >= 2 && args[0] == "drivetest")
 {
     return await DriveTest.RunAsync(args[1],
         args.Length > 2 ? int.Parse(args[2]) : 8641,
         args.Length > 3 ? int.Parse(args[3]) : 9241,
-        args.Length > 4 ? args[4] : Path.Combine(Path.GetTempPath(), "minirover-drivetest-shots"));
+        args.Length > 4 && !args[4].StartsWith("--") ? args[4] : Path.Combine(Path.GetTempPath(), "minirover-drivetest-shots"),
+        args.SkipWhile(a => a != "--reboot").Skip(1).FirstOrDefault());
 }
 
 // minirover webtest <publish wwwroot> <COMx> [httpPort] [cdpPort] [screenshotDir]
