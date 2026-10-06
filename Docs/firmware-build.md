@@ -16,7 +16,16 @@ The `MINIROVER_ESP32` target fixes this and prepares the board for WebRTC:
 - wire protocol at **460800 baud**, with **CRC32** on so any corruption is detected and retried;
 - IPv6, DTLS and PSRAM settings needed by the WebRTC stack (libpeer);
 - 240 MHz CPU;
+- WebRTC data channels compiled in: the `SpawnDev.nanoFramework.WebRTC` interop assembly and its patched libpeer, which the build uses instead of the ESP-IDF registry copy;
 - based on `ESP32_PSRAM_REV0`, so it runs on every ESP32 chip revision a kit might have.
+
+## Get the sources
+
+```
+git clone --recursive https://github.com/LostBeard/MiniRover.git
+```
+
+`--recursive` brings in `firmware/external/SpawnDev.nanoFramework.WebRTC` (WebRTC data channels for nanoFramework) and its libpeer. In an existing clone: `git submodule update --init --recursive`.
 
 ## Prerequisites (Windows)
 

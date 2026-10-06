@@ -1,0 +1,3 @@
+[submodule "firmware/external/SpawnDev.nanoFramework.WebRTC"]
+	path = firmware/external/SpawnDev.nanoFramework.WebRTC
+	url = https://github.com/LostBeard/SpawnDev.nanoFramework.WebRTC.git
