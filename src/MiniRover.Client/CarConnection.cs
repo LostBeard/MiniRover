@@ -148,6 +148,13 @@ public sealed class CarConnection : IAsyncDisposable
                 case CarLink.MsgText:
                     OnText?.Invoke(System.Text.Encoding.UTF8.GetString(m, 1, m.Length - 1));
                     break;
+                case CarLink.MsgPong:
+                    if (CarLink.TryDecodeToken(m, 0, m.Length, out uint token) && token == _pingToken)
+                    {
+                        RoundTripMs = (int)(_pingClock.ElapsedMilliseconds - _pingSentMs);
+                        OnRoundTrip?.Invoke(RoundTripMs);
+                    }
+                    break;
                 case CarLink.MsgSettings:
                     var settings = CarSettings.Parse(System.Text.Encoding.UTF8.GetString(m, 1, m.Length - 1));
                     LastSettings = settings;
@@ -187,6 +194,22 @@ public sealed class CarConnection : IAsyncDisposable
 
     /// <summary>Asks the car for its settings; the answer arrives as <see cref="OnSettings"/>.</summary>
     public void RequestSettings() => Send([CarLink.MsgSettingsRequest]);
+
+    /// <summary>Sends a ping; the answer updates <see cref="RoundTripMs"/> and raises <see cref="OnRoundTrip"/>.
+    /// Only the latest ping counts (an answer to an older one is ignored).</summary>
+    public void Ping()
+    {
+        _pingToken++;
+        _pingSentMs = _pingClock.ElapsedMilliseconds;
+        Send(CarLink.EncodePing(_pingToken));
+    }
+
+    /// <summary>Last measured app -> car -> app time in milliseconds, -1 before the first answer.</summary>
+    public int RoundTripMs { get; private set; } = -1;
+    public event Action<int>? OnRoundTrip;
+    uint _pingToken;
+    long _pingSentMs;
+    readonly System.Diagnostics.Stopwatch _pingClock = System.Diagnostics.Stopwatch.StartNew();
 
     /// <summary>Spins one wheel (0..3) for <paramref name="holdMs"/> (setup and calibration). The car's deadman applies.</summary>
     public void MotorTest(int motor, int percent, int holdMs = 600) => Send(CarLink.EncodeMotorTest(motor, percent, holdMs));

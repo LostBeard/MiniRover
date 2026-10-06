@@ -43,6 +43,7 @@ namespace MiniRover.Protocol
         public const byte MsgTelemetry = 0x10;
         public const byte MsgAck = 0x11;
         public const byte MsgText = 0x12;
+        public const byte MsgPong = 0x14;       // [token u32] echoed from MsgPing
         public const byte MsgSettings = 0x13;   // [UTF-8 "key=value" lines]: every setting + read-only "info.*" keys
 
         // client -> car
@@ -56,6 +57,7 @@ namespace MiniRover.Protocol
         public const byte MsgSetting = 0x26;    // [UTF-8 "key=value"]
         public const byte MsgStop = 0x27;       // stop all motors now
         public const byte MsgSettingsRequest = 0x28; // the car answers with MsgSettings
+        public const byte MsgPing = 0x2A;       // [token u32]: the car answers MsgPong with the same token (link round trip)
         public const byte MsgMotorTest = 0x29;  // [motor u8 0..3][percent i8][holdMs u16]: one wheel (setup / calibration)
 
         public const int TelemetryBytes = 22;
@@ -197,6 +199,23 @@ namespace MiniRover.Protocol
             b[0] = MsgSettings;
             Array.Copy(t, 0, b, 1, len);
             return b;
+        }
+
+        public static byte[] EncodePing(uint token) => EncodeToken(MsgPing, token);
+        public static byte[] EncodePong(uint token) => EncodeToken(MsgPong, token);
+
+        /// <summary>Reads the token of a Ping or Pong (type checked by the caller).</summary>
+        public static bool TryDecodeToken(byte[] b, int offset, int length, out uint token)
+        {
+            token = 0;
+            if (b == null || offset < 0 || length < 5 || b.Length - offset < 5) return false;
+            token = (uint)(b[offset + 1] | (b[offset + 2] << 8) | (b[offset + 3] << 16) | (b[offset + 4] << 24));
+            return true;
+        }
+
+        static byte[] EncodeToken(byte type, uint token)
+        {
+            return new byte[] { type, (byte)token, (byte)(token >> 8), (byte)(token >> 16), (byte)(token >> 24) };
         }
 
         public static byte[] EncodeMotorTest(int motor, int percent, int holdMs)

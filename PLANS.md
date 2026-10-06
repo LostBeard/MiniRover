@@ -122,13 +122,14 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [ ] Several cars at once
 - [x] Drive page HUD: battery % (Li-ion curve) + volts, WiFi signal bars + dBm with an out-of-range warning, line + light sensors, telemetry rate, car memory
 - [x] Drive page video: canvas, browser JPEG decode, newest frame wins, bytes never enter .NET; HUD shows the car's video fps
-- [ ] Drive page: link RTT, distance, full screen + wake lock
+- [x] Drive page: link round trip in the HUD (44 ms measured on the LAN), full screen (verified), screen wake lock, the car stops when the tab is hidden
+- [ ] Drive page: sonar distance (needs the ultrasonic head)
 - [x] Touch sticks (pointer capture; drive + camera aim), keyboard (WASD / arrows, keys dropped on window blur), speed levels: touch drag and key W verified moving the real car from Chrome, release stops it (125-314 ms to telemetry "stopped")
 - [ ] Gamepad (standard mapping, triggers + sticks, A/B/Y): written, not yet tried with a real pad; rumble
 - [x] Lights toggle, horn
 - [ ] LED-matrix eyes and text, light patterns
 - [ ] Sensors page with live charts
-- [ ] Battery model: Li-ion discharge curve, sag-aware smoothing, time remaining, warnings
+- [x] Battery: Li-ion curve (%), time remaining from the idle-reading trend (unit-tested), low / empty / switch-off banners (banners not yet seen with a real low pack)
 - [x] Settings panel on the drive page (live link): top speed, steering sensitivity + stick curve (per car), camera size/quality/fps/orientation, camera aim (pan/tilt trim, camera held centered), per-wheel test / reversed / balance, battery calibration from a multimeter reading, LED brightness, HTTP test API, signaling server. Verified from Chrome: values match the car, wheel test spins a wheel, a change is stored
 - [ ] Guided first-run wizard (wheels, camera aim) after "Add a car"
 - [ ] Car-side modes: line following, light seeking, obstacle avoidance

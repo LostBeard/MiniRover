@@ -268,6 +268,12 @@ namespace MiniRover.Car
                         else MiniRover.Native.Camera.Stream(-1, -1, 1);
                     }
                     break;
+                case CarLink.MsgPing:
+                    {
+                        uint token;
+                        if (CarLink.TryDecodeToken(_rx, o, len, out token)) Send(CarLink.EncodePong(token));
+                    }
+                    break;
                 case CarLink.MsgSettingsRequest:
                     SendSettings();
                     break;

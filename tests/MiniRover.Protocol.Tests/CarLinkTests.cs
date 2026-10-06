@@ -184,3 +184,20 @@ public class CarLinkSettingsTests
         Assert.Equal(1 + CarLink.MaxSettingsBytes, CarLink.EncodeSettings(new string('k', 9000)).Length);
     }
 }
+
+public class CarLinkPingTests
+{
+    [Fact]
+    public void Ping_and_pong_carry_the_token()
+    {
+        byte[] ping = CarLink.EncodePing(0xA1B2C3D4);
+        Assert.Equal(CarLink.MsgPing, ping[0]);
+        Assert.True(CarLink.TryDecodeToken(ping, 0, ping.Length, out uint t));
+        Assert.Equal(0xA1B2C3D4u, t);
+        byte[] pong = CarLink.EncodePong(t);
+        Assert.Equal(CarLink.MsgPong, pong[0]);
+        Assert.True(CarLink.TryDecodeToken(pong, 0, pong.Length, out uint t2));
+        Assert.Equal(t, t2);
+        Assert.False(CarLink.TryDecodeToken(pong, 0, 4, out _));
+    }
+}

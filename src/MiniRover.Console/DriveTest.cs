@@ -71,6 +71,17 @@ public static class DriveTest
             Console.WriteLine($"PASS video: first 30 frames decoded within {sw.ElapsedMilliseconds} ms, then {(f1 - f0) / 3.0:F1} fps decoded, canvas {size["w"]}x{size["h"]}");
             await cdp.ScreenshotAsync(Path.Combine(shotDir, "drive-1-connected.png"));
 
+            int rtt = await WaitForIntAsync(cdp, "[data-test=hud-rtt]", "data-rtt", v => v > 0, "a link round-trip measurement");
+            Console.WriteLine($"PASS link round trip {rtt} ms");
+            await ClickAsync(cdp, "[data-test=btn-fullscreen]");
+            await Task.Delay(500);
+            bool full = (await EvalAsync(cdp, "document.fullscreenElement !== null")).GetValue<bool>();
+            if (!full) throw new Exception("FAIL Full screen button did not enter full screen");
+            await ClickAsync(cdp, "[data-test=btn-fullscreen]");
+            await Task.Delay(500);
+            if ((await EvalAsync(cdp, "document.fullscreenElement !== null")).GetValue<bool>()) throw new Exception("FAIL Full screen did not exit");
+            Console.WriteLine("PASS full screen on and off");
+
             // Telemetry must keep flowing while video streams (it once starved: the car fell behind on commands).
             string rateText = (await EvalAsync(cdp, Deep("[data-test=hud-rate]") + ".textContent")).GetValue<string>();
             if (!int.TryParse(rateText.Split('/')[0], out int rate) || rate < 3) throw new Exception($"FAIL telemetry during video is {rateText}, want >= 3/s");

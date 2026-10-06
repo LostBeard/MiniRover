@@ -9,6 +9,7 @@
         <UiButton Secondary="true" OnClick="Leave" data-test="drive-back">Back</UiButton>
         <span class="mr-car-name">@Car.Name</span>
         <span class="@(_state == "connected" ? "mr-ok" : "mr-muted")" data-test="drive-status">@_status</span>
+        <UiButton Secondary="true" OnClick="ToggleFullscreen" data-test="btn-fullscreen">@(_fullscreen ? "Exit full screen" : "Full screen")</UiButton>
     </div>
 
     <div class="mr-hud" data-test="drive-hud">
@@ -20,6 +21,7 @@
         <span title="Light sensor">light @(_t?.Light.ToString() ?? "-")</span>
         <span title="Line sensors (left, middle, right)" data-test="hud-line">line @LineText</span>
         <span title="Telemetry from the car per second" data-test="hud-rate">@(_rate < 0 ? "-" : _rate.ToString())/s</span>
+        <span title="Time for a command to reach the car and come back" data-test="hud-rtt" data-rtt="@(_link?.RoundTripMs ?? -1)">@RttText</span>
         <span data-test="hud-moving" data-moving="@((_t?.Moving ?? false) ? "1" : "0")">@((_t?.Moving ?? false) ? "moving" : "stopped")</span>
         <span title="Free internal memory on the car">heap @(_t?.FreeHeapKb.ToString() ?? "-") KB</span>
     </div>
@@ -27,6 +29,18 @@
     @if (WifiSignal.Warning(_t?.Rssi ?? 0) is string wifiWarning)
     {
         <div class="mr-banner mr-warn" data-test="drive-wifi-warning">@wifiWarning</div>
+    }
+    @if (_t != null && !_t.NoBattery && _t.BatteryLevel >= 2)
+    {
+        <div class="mr-banner mr-error" data-test="drive-battery-warning">Batteries empty: the car has stopped its motors to protect the cells. Charge or replace them.</div>
+    }
+    else if (_t != null && !_t.NoBattery && _t.BatteryLevel == 1)
+    {
+        <div class="mr-banner mr-warn" data-test="drive-battery-warning">Batteries low: drive the car back now. It slows down to make them last.</div>
+    }
+    else if (_t != null && _t.NoBattery)
+    {
+        <div class="mr-banner mr-warn" data-test="drive-battery-warning">The battery switch is off (USB power only): the wheels and camera servos will not move.</div>
     }
 
     <VideoView Channel="_video" />
@@ -80,7 +94,69 @@
     string SpeedName => Speeds[_speed].Name;
 
     string BatteryText => _t == null ? "battery -" : _t.NoBattery ? "battery off" :
-        $"{BatteryGauge.Percent(_t.BatteryMillivolts / 1000.0)}% {_t.BatteryMillivolts / 1000.0:F2} V";
+        $"{BatteryGauge.Percent(_t.BatteryMillivolts / 1000.0)}% {_t.BatteryMillivolts / 1000.0:F2} V" +
+        (_battery.MinutesLeft is double left ? $" (about {(left >= 90 ? $"{left / 60:F1} h" : $"{left:F0} min")} left)" : "");
+    string RttText => _link == null || _link.RoundTripMs < 0 ? "link -" : $"link {_link.RoundTripMs} ms";
+
+    readonly BatteryEstimator _battery = new();
+    readonly System.Diagnostics.Stopwatch _batteryClock = System.Diagnostics.Stopwatch.StartNew();
+    bool _fullscreen;
+    WakeLockSentinel? _wakeLock;
+    Document? _document;
+
+    async Task ToggleFullscreen()
+    {
+        try
+        {
+            if (_fullscreen)
+            {
+                await _document!.ExitFullscreen();
+                _fullscreen = false;
+            }
+            else
+            {
+                using var root = _document!.DocumentElement;
+                if (root != null) await root.RequestFullscreen();
+                _fullscreen = true;
+            }
+        }
+        catch (Exception ex) { Console.WriteLine("Full screen: " + ex.Message); }
+    }
+
+    /// <summary>Keeps the screen on while driving (a dimming screen mid-drive is no fun). The browser drops the lock
+    /// whenever the tab is hidden, so it is taken again when the tab comes back.</summary>
+    async Task KeepScreenOn()
+    {
+        if (_wakeLock != null && !_wakeLock.Released) return;
+        try
+        {
+            using var navigator = _window!.Navigator;
+            using var wakeLock = navigator.WakeLock;
+            if (wakeLock == null) return; // not supported here
+            _wakeLock?.Dispose();
+            _wakeLock = await wakeLock.Request("screen");
+        }
+        catch (Exception ex) { Console.WriteLine("Wake lock: " + ex.Message); }
+    }
+
+    // Hidden tab (switched app, locked screen): stop the car now rather than wait for its deadman, and forget held
+    // keys and fingers. Visible again: take the screen wake lock again.
+    void OnVisibilityChange(Event e)
+    {
+        e.Dispose();
+        string state;
+        try { state = _document!.VisibilityState; } catch { return; }
+        if (state == "hidden")
+        {
+            _keys.Clear();
+            _touch = default;
+            try { if (_link?.IsConnected == true) _link.Stop(); } catch { }
+        }
+        else
+        {
+            _ = KeepScreenOn();
+        }
+    }
     string BatteryClass => _t == null ? "mr-muted" : _t.BatteryLevel >= 2 || _t.NoBattery ? "mr-error" : _t.BatteryLevel == 1 ? "mr-warn" : "mr-ok";
     string WifiText => _t == null || WifiSignal.Bars(_t.Rssi) < 0 ? "wifi -" :
         $"wifi {new string('|', WifiSignal.Bars(_t.Rssi))}{new string('.', 4 - WifiSignal.Bars(_t.Rssi))} {_t.Rssi} dBm";
@@ -103,6 +179,9 @@
         _window.OnKeyDown += OnKeyDown;
         _window.OnKeyUp += OnKeyUp;
         _window.OnBlur += OnBlur;
+        _document = _window.Document;
+        _document.OnVisibilityChange += OnVisibilityChange;
+        _ = KeepScreenOn();
         _ = RunAsync();
     }
 
@@ -223,6 +302,11 @@
                 _rate = _frames;
                 _frames = 0;
                 rateClock.Restart();
+                try { _link.Ping(); } catch (InvalidOperationException) { }
+                if (_t != null && !_t.NoBattery)
+                {
+                    _battery.Add(_batteryClock.Elapsed.TotalMinutes, BatteryGauge.Percent(_t.BatteryMillivolts / 1000.0), _t.Moving);
+                }
             }
             StateHasChanged();
         }
@@ -369,6 +453,17 @@
             _window.OnKeyDown -= OnKeyDown;
             _window.OnKeyUp -= OnKeyUp;
             _window.OnBlur -= OnBlur;
+            if (_document != null)
+            {
+                _document.OnVisibilityChange -= OnVisibilityChange;
+                if (_fullscreen) { try { await _document.ExitFullscreen(); } catch { } }
+                _document.Dispose();
+            }
+            if (_wakeLock != null)
+            {
+                try { if (!_wakeLock.Released) await _wakeLock.Release(); } catch { }
+                _wakeLock.Dispose();
+            }
             _window.Dispose();
         }
         if (link != null) await link.DisposeAsync(); // idempotent: the loop's cleanup may have done it already
