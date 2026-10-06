@@ -1,0 +1,315 @@
+@implements IAsyncDisposable
+@using MiniRover.Client
+@using MiniRover.Protocol
+@using SpawnDev.SpawnJS.JSObjects
+@inject SpawnJSRuntime JS
+
+<div class="mr-drive" data-test="drive" data-state="@_state">
+    <div class="mr-drive-top">
+        <UiButton Secondary="true" OnClick="Leave" data-test="drive-back">Back</UiButton>
+        <span class="mr-car-name">@Car.Name</span>
+        <span class="@(_state == "connected" ? "mr-ok" : "mr-muted")" data-test="drive-status">@_status</span>
+    </div>
+
+    <div class="mr-hud" data-test="drive-hud">
+        <span class="@BatteryClass" title="Battery" data-test="hud-battery" data-volts="@(_t?.BatteryMillivolts ?? 0)">
+            @BatteryText
+        </span>
+        <span class="@WifiClass" title="The car's WiFi signal" data-test="hud-wifi" data-rssi="@(_t?.Rssi ?? 0)">@WifiText</span>
+        <span title="Light sensor">light @(_t?.Light.ToString() ?? "-")</span>
+        <span title="Line sensors (left, middle, right)" data-test="hud-line">line @LineText</span>
+        <span title="Telemetry from the car per second" data-test="hud-rate">@(_rate < 0 ? "-" : _rate.ToString())/s</span>
+        <span data-test="hud-moving" data-moving="@((_t?.Moving ?? false) ? "1" : "0")">@((_t?.Moving ?? false) ? "moving" : "stopped")</span>
+        <span title="Free internal memory on the car">heap @(_t?.FreeHeapKb.ToString() ?? "-") KB</span>
+    </div>
+
+    @if (WifiSignal.Warning(_t?.Rssi ?? 0) is string wifiWarning)
+    {
+        <div class="mr-banner mr-warn" data-test="drive-wifi-warning">@wifiWarning</div>
+    }
+
+    <div class="mr-video" data-test="drive-video">
+        <span class="mr-muted">Live video arrives with the camera firmware (next step).</span>
+    </div>
+
+    <div class="mr-controls">
+        <Stick Label="Drive" TestId="stick-drive" OnMove="OnDriveStick" />
+        <div class="mr-buttons">
+            <UiButton OnClick="Horn" data-test="btn-horn">Horn</UiButton>
+            <UiButton Secondary="@(!_lights)" OnClick="ToggleLights" data-test="btn-lights">Lights</UiButton>
+            <UiButton Secondary="true" OnClick="CenterCamera" data-test="btn-center">Center camera</UiButton>
+            <UiButton Secondary="true" OnClick="CycleSpeed" data-test="btn-speed">Speed: @SpeedName</UiButton>
+        </div>
+        <Stick Label="Camera" TestId="stick-camera" SpringBack="false" OnMove="OnCameraStick" />
+    </div>
+    <p class="mr-muted mr-keys">Keyboard: W A S D or arrows to drive, Space horn, L lights, C center camera. Gamepad: left stick or triggers to drive, right stick aims the camera, A horn, Y lights, B center.</p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SavedCar Car { get; set; } = default!;
+    [Parameter] public EventCallback OnLeave { get; set; }
+
+    // Commands go out at 20 Hz while driving; the car holds each for HoldMs and stops by itself if they stop coming
+    // (tab hidden, network gone), so HoldMs is a few periods, never seconds.
+    const int PeriodMs = 50;
+    const int HoldMs = 300;
+
+    CarConnection? _link;
+    readonly DriveMixer _mixer = new() { SpeedLimit = 0.6 };
+    readonly CancellationTokenSource _cts = new();
+    CarLink.Telemetry? _t;
+    string _state = "connecting", _status = "connecting...";
+    int _rate = -1, _frames; // -1 until the first full second has been counted
+    bool _lights, _wasDriving;
+
+    // input state
+    (double X, double Y) _touch;
+    readonly HashSet<string> _keys = new();
+    double _pan = 90, _tilt = 90, _sentPan = -1, _sentTilt = -1;
+    bool _padA, _padY, _padB;
+
+    Window? _window;
+
+    static readonly (string Name, double Limit)[] Speeds = [("slow", 0.35), ("normal", 0.6), ("fast", 1.0)];
+    int _speed = 1;
+    string SpeedName => Speeds[_speed].Name;
+
+    string BatteryText => _t == null ? "battery -" : _t.NoBattery ? "battery off" :
+        $"{BatteryGauge.Percent(_t.BatteryMillivolts / 1000.0)}% {_t.BatteryMillivolts / 1000.0:F2} V";
+    string BatteryClass => _t == null ? "mr-muted" : _t.BatteryLevel >= 2 || _t.NoBattery ? "mr-error" : _t.BatteryLevel == 1 ? "mr-warn" : "mr-ok";
+    string WifiText => _t == null || WifiSignal.Bars(_t.Rssi) < 0 ? "wifi -" :
+        $"wifi {new string('|', WifiSignal.Bars(_t.Rssi))}{new string('.', 4 - WifiSignal.Bars(_t.Rssi))} {_t.Rssi} dBm";
+    string WifiClass => _t == null || WifiSignal.Bars(_t.Rssi) < 0 ? "mr-muted" : WifiSignal.Bars(_t.Rssi) switch { 0 => "mr-error", 1 => "mr-warn", _ => "mr-ok" };
+    string LineText => _t == null ? "-" : $"{((_t.Line & 1) != 0 ? "#" : "_")}{((_t.Line & 2) != 0 ? "#" : "_")}{((_t.Line & 4) != 0 ? "#" : "_")}";
+
+    protected override void OnInitialized()
+    {
+        _window = JS.Get<Window>("window");
+        _window.OnKeyDown += OnKeyDown;
+        _window.OnKeyUp += OnKeyUp;
+        _window.OnBlur += OnBlur;
+        _ = RunAsync();
+    }
+
+    async Task RunAsync()
+    {
+        try
+        {
+            _link = CarConnection.FromKeyHex(Car.RoomKeyHex);
+            _link.OnStatus += s => { _status = s; _ = InvokeAsync(StateHasChanged); };
+            _link.OnTelemetry += t => { _t = t; _frames++; };
+            _link.OnDisconnected += () => { _state = "disconnected"; _ = InvokeAsync(StateHasChanged); };
+            _status = "looking for " + Car.Name + "... (is it switched on?)";
+            StateHasChanged();
+            using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token))
+            {
+                timeout.CancelAfter(TimeSpan.FromSeconds(90));
+                await _link.ConnectAsync(timeout.Token);
+            }
+            _state = "connected";
+            _status = "connected";
+            CenterCamera();
+            StateHasChanged();
+            await ControlLoop();
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            _state = "failed";
+            _status = ex is OperationCanceledException ? "the car did not answer. Is it on and on WiFi?" : ex.Message;
+            StateHasChanged();
+        }
+    }
+
+    async Task ControlLoop()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(PeriodMs));
+        var rateClock = System.Diagnostics.Stopwatch.StartNew();
+        while (await timer.WaitForNextTickAsync(_cts.Token))
+        {
+            if (_link == null || !_link.IsConnected) { _state = "disconnected"; StateHasChanged(); return; }
+            var (throttle, steer, camX, camY) = ReadInputs();
+
+            _mixer.SpeedLimit = Speeds[_speed].Limit;
+            var (l, r) = _mixer.Mix(throttle, steer);
+            if (l != 0 || r != 0)
+            {
+                _link.Drive(l, r, HoldMs);
+                _wasDriving = true;
+            }
+            else if (_wasDriving)
+            {
+                _link.Stop(); // do not wait out the hold when the driver lets go
+                _wasDriving = false;
+            }
+
+            // Camera: the touch pad aims directly; a gamepad stick moves the aim (rate control).
+            if (camX != 0 || camY != 0)
+            {
+                _pan = Math.Clamp(_pan - camX * 3, 0, 180);   // stick right = pan right = below 90
+                _tilt = Math.Clamp(_tilt + camY * 3, 80, 180); // stick up = tilt up = above 90
+            }
+            if (Math.Abs(_pan - _sentPan) >= 0.5 || Math.Abs(_tilt - _sentTilt) >= 0.5)
+            {
+                _link.Servo(_pan, _tilt);
+                _sentPan = _pan;
+                _sentTilt = _tilt;
+            }
+
+            if (rateClock.ElapsedMilliseconds >= 1000)
+            {
+                _rate = _frames;
+                _frames = 0;
+                rateClock.Restart();
+            }
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Touch wins over a gamepad, a gamepad over the keyboard: whichever the driver is using right now.</summary>
+    (double Throttle, double Steer, double CamX, double CamY) ReadInputs()
+    {
+        double throttle = 0, steer = 0, camX = 0, camY = 0;
+        if (_touch != default)
+        {
+            throttle = _touch.Y;
+            steer = _touch.X;
+        }
+        else if (ReadGamepad(out var gp))
+        {
+            (throttle, steer, camX, camY) = gp;
+        }
+        else
+        {
+            if (_keys.Contains("w") || _keys.Contains("arrowup")) throttle += 1;
+            if (_keys.Contains("s") || _keys.Contains("arrowdown")) throttle -= 1;
+            if (_keys.Contains("d") || _keys.Contains("arrowright")) steer += 0.7;
+            if (_keys.Contains("a") || _keys.Contains("arrowleft")) steer -= 0.7;
+        }
+        return (throttle, steer, camX, camY);
+    }
+
+    bool ReadGamepad(out (double, double, double, double) values)
+    {
+        values = default;
+        using var navigator = _window!.Navigator;
+        Gamepad[]? pads;
+        try { pads = navigator.GetGamepads(); } catch { return false; }
+        if (pads == null) return false;
+        bool used = false;
+        foreach (var pad in pads)
+        {
+            if (pad == null) continue;
+            using (pad)
+            {
+                if (used || pad.Mapping != "standard") continue;
+                double[] axes = pad.Axes;
+                var buttons = pad.Buttons;
+                try
+                {
+                    double rt = buttons.Length > 7 ? buttons[7].Value : 0, lt = buttons.Length > 6 ? buttons[6].Value : 0;
+                    double stickY = axes.Length > 1 ? -axes[1] : 0;
+                    double throttle = Math.Abs(rt - lt) > 0.05 ? rt - lt : stickY;
+                    double steer = axes.Length > 0 ? axes[0] : 0;
+                    double camX = axes.Length > 2 ? Dead(axes[2]) : 0, camY = axes.Length > 3 ? Dead(-axes[3]) : 0;
+                    Edge(buttons, 0, ref _padA, Horn);
+                    Edge(buttons, 3, ref _padY, ToggleLights);
+                    Edge(buttons, 1, ref _padB, CenterCamera);
+                    values = (throttle, steer, camX, camY);
+                    used = Math.Abs(throttle) > _mixer.Deadzone || Math.Abs(steer) > _mixer.Deadzone || camX != 0 || camY != 0;
+                }
+                finally
+                {
+                    foreach (var b in buttons) b.Dispose();
+                }
+            }
+        }
+        return used;
+    }
+
+    static double Dead(double v) => Math.Abs(v) < 0.15 ? 0 : v;
+
+    static void Edge(GamepadButton[] buttons, int i, ref bool last, Action action)
+    {
+        bool now = buttons.Length > i && buttons[i].Pressed;
+        if (now && !last) action();
+        last = now;
+    }
+
+    Task OnDriveStick((double X, double Y) v) { _touch = v; return Task.CompletedTask; }
+
+    Task OnCameraStick((double X, double Y) v)
+    {
+        // The pad maps directly to angles: full left/right = 60 degrees each way, full up/down = the tilt range.
+        _pan = 90 - v.X * 60;
+        _tilt = Math.Clamp(90 + v.Y * 60, 80, 180);
+        return Task.CompletedTask;
+    }
+
+    void OnKeyDown(KeyboardEvent e)
+    {
+        string k = e.Key.ToLowerInvariant();
+        if (k is "arrowup" or "arrowdown" or "arrowleft" or "arrowright" or " ") e.PreventDefault(); // no page scroll
+        if (!_keys.Add(k)) return; // auto-repeat
+        if (k == " ") Horn();
+        else if (k == "l") ToggleLights();
+        else if (k == "c") CenterCamera();
+        e.Dispose();
+    }
+
+    void OnKeyUp(KeyboardEvent e)
+    {
+        _keys.Remove(e.Key.ToLowerInvariant());
+        e.Dispose();
+    }
+
+    // Keys released while the window has no focus never send keyup: forget them so the car does not drive on.
+    void OnBlur(FocusEvent e)
+    {
+        _keys.Clear();
+        _touch = default;
+        e.Dispose();
+    }
+
+    void Horn() { if (_link?.IsConnected == true) _link.Buzzer(2000, 250); }
+
+    void ToggleLights()
+    {
+        _lights = !_lights;
+        if (_link?.IsConnected == true)
+        {
+            if (_lights) _link.Leds(255, 255, 255);
+            else _link.Leds(40, 40, 40);
+        }
+    }
+
+    void CenterCamera() { _pan = 90; _tilt = 90; }
+
+    void CycleSpeed() => _speed = (_speed + 1) % Speeds.Length;
+
+    async Task Leave()
+    {
+        await DisposeAsync();
+        await OnLeave.InvokeAsync();
+    }
+
+    bool _disposed;
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _cts.Cancel();
+        if (_window != null)
+        {
+            _window.OnKeyDown -= OnKeyDown;
+            _window.OnKeyUp -= OnKeyUp;
+            _window.OnBlur -= OnBlur;
+            _window.Dispose();
+        }
+        if (_link != null)
+        {
+            try { if (_link.IsConnected) _link.Stop(); } catch { }
+            await _link.DisposeAsync();
+        }
+    }
+}

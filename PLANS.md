@@ -89,9 +89,10 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [x] Firmware preset for the classic ESP32-WROVER: libpeer + shared WebRTC interop + NimBLE (BLE setup); IPv6, PSRAM lwIP
 - [x] Fits the 4 MB flash: nanoCLR 0x1a3c90, 10% of the app partition free (grow the partition if the camera does not fit)
 - [x] DTLS + SCTP + two data channels with the desktop client (SipSorcery via SpawnDev.RTC)
-- [ ] DTLS + data channels with Chrome (the browser app)
+- [x] DTLS + data channels with Chrome (the browser app): connect + authenticate in 6.8-8.3 s (`minirover drivetest`)
 - [ ] Native JPEG task (esp32-camera, OV2640 / GC0308 detect); measure fps and latency vs resolution and quality
-- [ ] Free internal heap is 29 KB with a session up during the boot BLE window (measured): watch it when the camera lands
+- [x] `MiniRover.Native` interop (firmware/native): WiFi RSSI of the connected access point, WiFi modem sleep control
+- [ ] Free internal heap: 29 KB with a session up during the boot BLE window, 82 KB after it (measured): watch it when the camera lands
 
 ### Phase 3 - Protocol and link
 - [x] Shared protocol `CarLink` (handshake, drive, servo, lights, buzzer, eyes, stop, telemetry), compiled into both runtimes; 37 tests
@@ -100,17 +101,21 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [x] Measured on the real car through hub.spawndev.com: connect + authenticate in 6.6-6.7 s, telemetry 5 Hz, reconnect after a client leaves
 - [x] Deadman over WiFi: 300 ms hold -> stopped within 345 ms of sending, 1000 ms hold -> within 1036 ms (HTTP); over WebRTC one drive frame with 300 / 1000 ms hold -> telemetry reports stopped at 519 / 1236 ms (includes up to 200 ms telemetry period)
 - [x] `MiniRover.Console link` drives the real car (`MiniRover.Client.CarConnection`, shared with the browser app)
-- [ ] Disable WiFi power save (modem sleep) for driving: a status poll stalled 1.4 s on the car (measured), unacceptable for 30 Hz control
+- [x] WiFi modem sleep off once the BLE window closes (ESP-IDF requires it while Bluetooth is on): 60 status polls max 0.43 s, median 0.18 s (one earlier poll had stalled 1.4 s with it on)
 - [ ] The HTTP test API is unauthenticated on the LAN: gate it (pairing key) or make it opt-in before a release
 - [ ] Report upstream: nanoFramework `HMACSHA256(byte[] key)` keeps the caller's array and `Dispose()` zeroes it (wiped the car's pairing key; MiniRover uses `HashData`)
 
 ### Phase 4 - Browser app
 - [x] App scaffold: SpawnJSAppBuilder + RazorRenderer + RazorUI (dark theme), garage of paired cars (localStorage)
 - [x] BLE setup wizard (Web Bluetooth): find car, code check, network scan/choice, pairing key, WiFi hand-off, reconnect after reboot. Verified end to end in Chrome against the real car (`minirover webtest`); WiFi hand-off itself not yet run with a real network
-- [ ] Connect over WebRTC / multiple cars / auto-reconnect
-- [ ] Drive page: full-screen video, HUD (battery, link RTT, WiFi signal, fps, distance, line sensors, speed limit)
-- [ ] Touch dual sticks (pointer events), gamepad (polled per frame, standard mapping, rumble), keyboard
-- [ ] Lights, LED-matrix eyes and text, buzzer
+- [x] Connect over WebRTC from the garage (Drive button)
+- [ ] Auto-reconnect after a drop; several cars at once
+- [x] Drive page HUD: battery % (Li-ion curve) + volts, WiFi signal bars + dBm with an out-of-range warning, line + light sensors, telemetry rate, car memory
+- [ ] Drive page: video, link RTT, fps, distance, full screen + wake lock
+- [x] Touch sticks (pointer capture; drive + camera aim), keyboard (WASD / arrows, keys dropped on window blur), speed levels: touch drag and key W verified moving the real car from Chrome, release stops it (125-314 ms to telemetry "stopped")
+- [ ] Gamepad (standard mapping, triggers + sticks, A/B/Y): written, not yet tried with a real pad; rumble
+- [x] Lights toggle, horn
+- [ ] LED-matrix eyes and text, light patterns
 - [ ] Sensors page with live charts
 - [ ] Battery model: Li-ion discharge curve, sag-aware smoothing, time remaining, warnings
 - [ ] Settings: servo calibration wizard, motor trim, camera, speed limit, input curves, signaling server

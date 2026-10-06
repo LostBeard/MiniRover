@@ -246,6 +246,7 @@ namespace MiniRover.Car
                 t.PanTenths = (int)(_car.Servos.Pan * 10);
                 t.TiltTenths = (int)(_car.Servos.Tilt * 10);
             }
+            try { t.Rssi = MiniRover.Native.Board.WifiRssi(); } catch { } // so the driver sees the car going out of range
             t.FreeHeapKb = PeerConnection.GetStat(_handle, PeerConnection.StatFreeInternalBytes) / 1024;
             return t;
         }

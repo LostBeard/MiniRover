@@ -1,0 +1,74 @@
+@using SpawnDev.SpawnJS.JSObjects
+@using SpawnDev.SpawnJS.RazorRenderer
+@inject SpawnDomRenderer Renderer
+
+@* A virtual thumbstick for touch screens (and mice). Pointer capture keeps the drag even when the finger slides off
+   the pad, and only the first finger counts, so a second finger on the same pad cannot hijack it. *@
+<div class="mr-stick @(_active ? "mr-stick-on" : "")" @ref="_pad" data-test="@TestId"
+     @onpointerdown="Down" @onpointermove="Move" @onpointerup="Up" @onpointercancel="Up" @onlostpointercapture="Up"
+     @oncontextmenu:preventDefault="true">
+    <div class="mr-stick-knob" style="transform: translate(@Px(_x)px, @Px(-_y)px)"></div>
+    <span class="mr-stick-label">@Label</span>
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string? TestId { get; set; }
+    /// <summary>x right, y up, each -1..1; (0, 0) when released.</summary>
+    [Parameter] public EventCallback<(double X, double Y)> OnMove { get; set; }
+    /// <summary>Snap back to the center on release (drive) or stay where it was let go (camera aim).</summary>
+    [Parameter] public bool SpringBack { get; set; } = true;
+
+    ElementReference _pad;
+    long _pointer = -1;
+    bool _active;
+    double _x, _y;
+    double _cx, _cy, _radius = 1;
+
+    // Knob travel in CSS pixels at full deflection (matches the CSS pad size).
+    const double Travel = 48;
+
+    string Px(double v) => (v * Travel).ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+
+    async Task Down(PointerEventArgs e)
+    {
+        if (_pointer >= 0) return;
+        _pointer = e.PointerId;
+        using (var el = Renderer.GetElement<HTMLElement>(_pad))
+        {
+            if (el == null) return;
+            el.SetPointerCapture((int)e.PointerId);
+            using var r = el.GetBoundingClientRect();
+            _cx = r.X + r.Width / 2;
+            _cy = r.Y + r.Height / 2;
+            _radius = Math.Max(1, Math.Min(r.Width, r.Height) / 2 - 8);
+        }
+        _active = true;
+        await Report(e);
+    }
+
+    async Task Move(PointerEventArgs e)
+    {
+        if (e.PointerId != _pointer) return;
+        await Report(e);
+    }
+
+    async Task Up(PointerEventArgs e)
+    {
+        if (e.PointerId != _pointer) return;
+        _pointer = -1;
+        _active = false;
+        if (SpringBack) { _x = _y = 0; }
+        await OnMove.InvokeAsync((_x, _y));
+    }
+
+    Task Report(PointerEventArgs e)
+    {
+        double x = (e.ClientX - _cx) / _radius, y = -(e.ClientY - _cy) / _radius;
+        double len = Math.Sqrt(x * x + y * y);
+        if (len > 1) { x /= len; y /= len; }
+        _x = x;
+        _y = y;
+        return OnMove.InvokeAsync((x, y));
+    }
+}

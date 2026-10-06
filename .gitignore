@@ -50,3 +50,6 @@ Thumbs.db
 
 # local test/deploy logs
 *.log
+
+# MetadataProcessor interop stubs (the maintained copy is firmware/native/)
+Stubs/

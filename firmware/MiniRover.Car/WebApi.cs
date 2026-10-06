@@ -182,6 +182,9 @@ namespace MiniRover.Car
             // Monotonic: the wall clock jumps when WiFi syncs the time (wall-clock uptime read ~56 years on the car).
             sb.Append("{\"uptimeS\":").Append((Environment.TickCount64 / 1000).ToString());
             sb.Append(",\"ip\":\"").Append(_wifi.IpAddress).Append('"');
+            int rssi = 0;
+            try { rssi = MiniRover.Native.Board.WifiRssi(); } catch { }
+            sb.Append(",\"rssi\":").Append(rssi.ToString());
             sb.Append(",\"managedBytesInUse\":").Append(System.GC.GetTotalMemory(false).ToString());
             string faults = _car.Faults;
             if (_http.StartError.Length > 0) faults += (faults.Length > 0 ? "; " : "") + _http.StartError;

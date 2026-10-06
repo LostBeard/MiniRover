@@ -78,7 +78,7 @@ static class LinkCommand
             telemetryCount++;
             last = t;
             if (print) Console.WriteLine($"  telemetry #{t.Seq}: {t.BatteryMillivolts / 1000.0:F2} V level {t.BatteryLevel} moving={t.Moving} " +
-                                         $"light={t.Light} line={t.Line} pan={t.PanTenths / 10.0} tilt={t.TiltTenths / 10.0} heap={t.FreeHeapKb} KB");
+                                         $"light={t.Light} line={t.Line} pan={t.PanTenths / 10.0} tilt={t.TiltTenths / 10.0} heap={t.FreeHeapKb} KB wifi={t.Rssi} dBm");
         };
         int videoFrames = 0;
         link.OnVideoChannel += ch => ch.OnBinaryMessage += _ => videoFrames++;

@@ -1,7 +1,7 @@
 @inject CarStore Cars
 @inject RazorUITheme Theme
 
-<div class="mr-shell">
+<div class="@(_view == View.Drive ? "mr-shell mr-shell-wide" : "mr-shell")">
     <header class="mr-header">
         <span class="mr-logo" data-test="app-title">MiniRover</span>
         <nav>
@@ -11,9 +11,13 @@
     </header>
 
     <main class="mr-main">
-        @if (_view == View.Garage)
+        @if (_view == View.Drive && _driving != null)
         {
-            <Garage OnAddCar="@(() => Show(View.Setup))" />
+            <Drive Car="_driving" OnLeave="@(() => Show(View.Garage))" />
+        }
+        else if (_view == View.Garage)
+        {
+            <Garage OnAddCar="@(() => Show(View.Setup))" OnDrive="@(car => { _driving = car; _view = View.Drive; })" />
         }
         else
         {
@@ -28,8 +32,9 @@
 </div>
 
 @code {
-    enum View { Garage, Setup }
+    enum View { Garage, Setup, Drive }
     View _view;
+    SavedCar? _driving;
 
     protected override void OnInitialized()
     {

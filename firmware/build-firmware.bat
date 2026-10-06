@@ -28,8 +28,11 @@ if not exist "%SDNF_DIR%\native\SpawnDev.nanoFramework.WebRTC\FindINTEROP-SpawnD
 )
 REM CMake wants forward slashes.
 set "SDNF_CMAKE=%SDNF_DIR:\=/%"
-set "INTEROP_ASSEMBLIES=SpawnDev.nanoFramework.WebRTC"
-set "INTEROP_PATHS=%SDNF_CMAKE%/native/SpawnDev.nanoFramework.WebRTC"
+REM MiniRover.Native (this repo): ESP32 functions nanoFramework does not expose (WiFi signal, power save, camera next).
+set "MRN_DIR=%~dp0native\MiniRover.Native"
+set "MRN_CMAKE=%MRN_DIR:\=/%"
+set "INTEROP_ASSEMBLIES=SpawnDev.nanoFramework.WebRTC MiniRover.Native"
+set "INTEROP_PATHS=%SDNF_CMAKE%/native/SpawnDev.nanoFramework.WebRTC;%MRN_CMAKE%"
 set "EXTRA_COMPONENTS=%SDNF_CMAKE%/native/components/libpeer"
 
 if not exist "%NF_DIR%\targets\ESP32\defconfig\MINIROVER_ESP32_defconfig" (

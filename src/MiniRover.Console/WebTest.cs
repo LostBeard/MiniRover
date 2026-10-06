@@ -110,17 +110,17 @@ public static class WebTest
     }
 
     /// <summary>querySelector that also searches open shadow roots (the RazorRenderer may mount inside one).</summary>
-    static string Deep(string selector) =>
+    internal static string Deep(string selector) =>
         "(function f(root,s){const h=root.querySelector(s);if(h)return h;for(const e of root.querySelectorAll('*')){if(e.shadowRoot){const r=f(e.shadowRoot,s);if(r)return r;}}return null;})(document," + JsonSerializer.Serialize(selector) + ")";
 
-    static async Task<JsonNode> EvalAsync(Cdp cdp, string expression, bool userGesture = false)
+    internal static async Task<JsonNode> EvalAsync(Cdp cdp, string expression, bool userGesture = false)
     {
         JsonNode r = await cdp.SendAsync("Runtime.evaluate", new JsonObject { ["expression"] = expression, ["returnByValue"] = true, ["awaitPromise"] = true, ["userGesture"] = userGesture });
         if (r["exceptionDetails"] != null) throw new Exception("page script failed: " + r["exceptionDetails"]!.ToJsonString());
         return r["result"]!["value"] ?? JsonValue.Create("")!;
     }
 
-    static async Task WaitForAsync(Cdp cdp, string selector, TimeSpan timeout, string what)
+    internal static async Task WaitForAsync(Cdp cdp, string selector, TimeSpan timeout, string what)
     {
         DateTime end = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < end)
@@ -132,12 +132,12 @@ public static class WebTest
         throw new Exception($"FAIL timed out waiting for {what} ({selector})" + (err.Length > 0 ? " - page error: " + err : ""));
     }
 
-    static Task ClickAsync(Cdp cdp, string selector) => EvalAsync(cdp, Deep(selector) + ".click(), true", userGesture: true);
+    internal static Task ClickAsync(Cdp cdp, string selector) => EvalAsync(cdp, Deep(selector) + ".click(), true", userGesture: true);
 
     static Task TypeAsync(Cdp cdp, string selector, string text) =>
         EvalAsync(cdp, "(()=>{const e=" + Deep(selector) + ";e.focus();e.value=" + JsonSerializer.Serialize(text) + ";e.dispatchEvent(new Event('input',{bubbles:true}));return true;})()");
 
-    static async Task<T> WithTimeout<T>(Task<T> task, TimeSpan timeout, string what)
+    internal static async Task<T> WithTimeout<T>(Task<T> task, TimeSpan timeout, string what)
     {
         if (await Task.WhenAny(task, Task.Delay(timeout)) != task) throw new TimeoutException($"FAIL timed out waiting for {what}");
         return await task;

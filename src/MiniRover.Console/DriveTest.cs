@@ -1,0 +1,148 @@
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using static MiniRover.ConsoleApp.WebTest;
+
+namespace MiniRover.ConsoleApp;
+
+/// <summary>
+/// Hardware-in-the-loop browser test of the drive page against a REAL car over the REAL WebRTC link (car -> tracker ->
+/// Chrome): seeds the pairing key this computer holds into a throwaway Chrome profile, opens the published app, presses
+/// Drive and asserts on named DOM hooks: connected, live battery + WiFi telemetry, then a real touch drag and real key
+/// presses must make the car report "moving" and, on release, "stopped". THE WHEELS MUST BE OFF THE GROUND.
+/// </summary>
+public static class DriveTest
+{
+    public static async Task<int> RunAsync(string webRoot, int httpPort, int cdpPort, string shotDir)
+    {
+        if (!File.Exists(Path.Combine(webRoot, "index.html"))) throw new FileNotFoundException("publish the app first", Path.Combine(webRoot, "index.html"));
+        var (name, keyHex) = CarKeys.Load().LastOrDefault();
+        if (keyHex == null) { Console.Error.WriteLine("No pairing key: run `minirover setup --pairing` first."); return 2; }
+        // A busy port means someone else's server or browser (a teammate's Chrome once got driven by mistake).
+        foreach (int port in new[] { httpPort, cdpPort })
+        {
+            if (!PortFree(port)) { Console.Error.WriteLine($"port {port} is in use; pick another"); return 2; }
+        }
+        Directory.CreateDirectory(shotDir);
+
+        using var server = StaticServer.Start(webRoot, httpPort);
+        string profile = Path.Combine(Path.GetTempPath(), "minirover-drivetest-chrome");
+        if (Directory.Exists(profile)) Directory.Delete(profile, true);
+        using Process chrome = Process.Start(new ProcessStartInfo
+        {
+            FileName = @"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            ArgumentList = { $"--remote-debugging-port={cdpPort}", $"--user-data-dir={profile}", "--no-first-run",
+                             "--no-default-browser-check", "--window-size=1200,950", "about:blank" },
+            UseShellExecute = false,
+        })!;
+        Console.WriteLine($"chrome PID {chrome.Id} on CDP {cdpPort}, app on http://localhost:{httpPort}/");
+        try
+        {
+            await using var cdp = await Cdp.ConnectAsync(cdpPort);
+            await cdp.SendAsync("Runtime.enable");
+            await cdp.SendAsync("Page.enable");
+            await cdp.SendAsync("Emulation.setTouchEmulationEnabled", new JsonObject { ["enabled"] = true, ["maxTouchPoints"] = 2 });
+            var car = new JsonArray(new JsonObject { ["Name"] = name, ["RoomKeyHex"] = keyHex, ["LastIp"] = "", ["Firmware"] = "test", ["PairedUtc"] = DateTime.UtcNow.ToString("o") });
+            string seed = $"if (location.origin === 'http://localhost:{httpPort}') localStorage.setItem('minirover.cars.v1', {JsonSerializer.Serialize(car.ToJsonString())});";
+            await cdp.SendAsync("Page.addScriptToEvaluateOnNewDocument", new JsonObject { ["source"] = seed });
+            await cdp.SendAsync("Page.navigate", new JsonObject { ["url"] = $"http://localhost:{httpPort}/" });
+
+            await WaitForAsync(cdp, "[data-test=garage-drive]", TimeSpan.FromSeconds(60), "the garage with a Drive button");
+            Console.WriteLine($"PASS garage lists {name}");
+            var sw = Stopwatch.StartNew();
+            await ClickAsync(cdp, "[data-test=garage-drive]");
+            await WaitForAsync(cdp, "[data-test=drive][data-state=connected]", TimeSpan.FromSeconds(95), "the drive page to connect to the car");
+            Console.WriteLine($"PASS connected over WebRTC from Chrome in {sw.ElapsedMilliseconds} ms");
+
+            int mv = await WaitForIntAsync(cdp, "[data-test=hud-battery]", "data-volts", v => v > 0, "battery telemetry");
+            int rssi = await WaitForIntAsync(cdp, "[data-test=hud-wifi]", "data-rssi", v => v != 0, "WiFi signal telemetry");
+            string hud = (await EvalAsync(cdp, Deep("[data-test=drive-hud]") + ".textContent.replace(/\\s+/g,' ').trim()")).GetValue<string>();
+            Console.WriteLine($"PASS telemetry: battery {mv / 1000.0:F2} V, WiFi {rssi} dBm; HUD: {hud}");
+            await cdp.ScreenshotAsync(Path.Combine(shotDir, "drive-1-connected.png"));
+
+            // Touch: a real touch drag straight up on the drive stick (full deflection), held, then released.
+            JsonNode rect = await EvalAsync(cdp, "(()=>{const r=" + Deep("[data-test=stick-drive]") + ".getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()");
+            double cx = rect["x"]!.GetValue<double>(), cy = rect["y"]!.GetValue<double>();
+            await Touch(cdp, "touchStart", cx, cy);
+            for (int i = 1; i <= 8; i++) await Touch(cdp, "touchMove", cx, cy - i * 12);
+            sw.Restart();
+            await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "1", TimeSpan.FromSeconds(3), "the car to report moving (touch)");
+            Console.WriteLine($"PASS touch drag: car reports moving after {sw.ElapsedMilliseconds} ms");
+            await cdp.ScreenshotAsync(Path.Combine(shotDir, "drive-2-touch.png"));
+            await Task.Delay(700);
+            await cdp.SendAsync("Input.dispatchTouchEvent", new JsonObject { ["type"] = "touchEnd", ["touchPoints"] = new JsonArray() });
+            sw.Restart();
+            await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "0", TimeSpan.FromSeconds(3), "the car to report stopped after release");
+            Console.WriteLine($"PASS released: car reports stopped after {sw.ElapsedMilliseconds} ms");
+
+            // Keyboard: hold W.
+            await Key(cdp, "keyDown", "w", "KeyW", 87);
+            sw.Restart();
+            await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "1", TimeSpan.FromSeconds(3), "the car to report moving (key W)");
+            Console.WriteLine($"PASS key W: car reports moving after {sw.ElapsedMilliseconds} ms");
+            await Task.Delay(500);
+            await Key(cdp, "keyUp", "w", "KeyW", 87);
+            sw.Restart();
+            await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "0", TimeSpan.FromSeconds(3), "the car to report stopped after key up");
+            Console.WriteLine($"PASS key up: car reports stopped after {sw.ElapsedMilliseconds} ms");
+
+            await ClickAsync(cdp, "[data-test=btn-horn]");
+            await ClickAsync(cdp, "[data-test=drive-back]");
+            await WaitForAsync(cdp, "[data-test=garage-drive]", TimeSpan.FromSeconds(10), "the garage after Back");
+            Console.WriteLine("PASS back to the garage (link closed)");
+            Console.WriteLine("ALL PASS");
+            return 0;
+        }
+        finally
+        {
+            try { if (!chrome.HasExited) chrome.Kill(entireProcessTree: true); } catch { }
+            try { Directory.Delete(profile, true); } catch { }
+        }
+    }
+
+    static bool PortFree(int port)
+    {
+        try { using var l = new TcpListener(IPAddress.Loopback, port); l.Start(); l.Stop(); return true; }
+        catch (SocketException) { return false; }
+    }
+
+    static Task Touch(Cdp cdp, string type, double x, double y) =>
+        cdp.SendAsync("Input.dispatchTouchEvent", new JsonObject
+        {
+            ["type"] = type,
+            ["touchPoints"] = new JsonArray(new JsonObject { ["x"] = x, ["y"] = y, ["id"] = 1 }),
+        });
+
+    static Task Key(Cdp cdp, string type, string key, string code, int keyCode)
+    {
+        var p = new JsonObject { ["type"] = type, ["key"] = key, ["code"] = code, ["windowsVirtualKeyCode"] = keyCode };
+        if (type == "keyDown") p["text"] = key; // CDP rejects a null text
+        return cdp.SendAsync("Input.dispatchKeyEvent", p);
+    }
+
+    static async Task<int> WaitForIntAsync(Cdp cdp, string selector, string attr, Func<int, bool> ok, string what)
+    {
+        DateTime end = DateTime.UtcNow.AddSeconds(10);
+        int v = 0;
+        while (DateTime.UtcNow < end)
+        {
+            string s = (await EvalAsync(cdp, Deep(selector) + $"?.getAttribute('{attr}') ?? ''")).GetValue<string>();
+            if (int.TryParse(s, out v) && ok(v)) return v;
+            await Task.Delay(200);
+        }
+        throw new Exception($"FAIL no {what} ({selector} {attr}={v})");
+    }
+
+    static async Task WaitForAttrAsync(Cdp cdp, string selector, string attr, string value, TimeSpan timeout, string what)
+    {
+        DateTime end = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < end)
+        {
+            if ((await EvalAsync(cdp, Deep(selector) + $"?.getAttribute('{attr}') ?? ''")).GetValue<string>() == value) return;
+            await Task.Delay(50);
+        }
+        throw new Exception($"FAIL timed out waiting for {what}");
+    }
+}

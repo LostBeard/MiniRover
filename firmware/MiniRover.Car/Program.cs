@@ -58,6 +58,7 @@ namespace MiniRover.Car
                         Thread.Sleep(Protocol.BleSetup.ConnectedAdvertiseSeconds * 1000);
                         ble.Stop();
                         System.Diagnostics.Debug.WriteLine("BLE setup window closed");
+                        DisableModemSleep();
                     }).Start();
                 });
             }
@@ -86,6 +87,21 @@ namespace MiniRover.Car
                     try { car.Matrix.Show(shown == BatteryLevel.Critical ? Eyes.Dead : Eyes.Open); }
                     catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Matrix: " + ex.Message); }
                 }
+            }
+        }
+
+        // WiFi modem sleep stalls receives for up to hundreds of ms (a status poll took 1.4 s), too slow for 20 Hz
+        // driving. ESP-IDF needs it while Bluetooth is on, so it goes off only once the BLE window has closed.
+        static void DisableModemSleep()
+        {
+            try
+            {
+                bool ok = MiniRover.Native.Board.SetWifiPowerSave(false);
+                System.Diagnostics.Debug.WriteLine("WiFi modem sleep " + (ok ? "off" : "could not be turned off"));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("WiFi modem sleep: " + ex.Message);
             }
         }
 

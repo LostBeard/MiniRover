@@ -43,6 +43,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MiniRover.Car.Drivers\MiniRover.Car.Drivers.nfproj" />
+    <ProjectReference Include="..\MiniRover.Native\MiniRover.Native.nfproj" />
     <ProjectReference Include="..\external\SpawnDev.nanoFramework.WebRTC\src\SpawnDev.nanoFramework.WebRTC\SpawnDev.nanoFramework.WebRTC.nfproj" />
   </ItemGroup>
   <ItemGroup>

@@ -246,6 +246,33 @@ bool connected = (bool)connectMi.Invoke(engine, connectArgs);
 if (!connected) { Console.WriteLine("Connect failed."); return 1; }
 Console.WriteLine("Connected.");
 
+// MiniRover: restart the CLR and hold it in "wait for debugger" before writing. Pausing (below) stops managed threads
+// only; native tasks the app started keep running (WebRTC pump, NimBLE, WiFi), and two deploys against a car with a
+// live link hung the device at the first blocks ("No reply from nanoDevice", HTTP dead too). A CLR restart runs the
+// native soft-reboot handlers (WebRTC slots closed, BLE torn down) and the held CLR never starts the old app, which
+// is the state every deploy that worked was in. Best-effort: on failure fall through to the pause.
+try
+{
+    var rebootOptionsType = engineType.Assembly.GetType("nanoFramework.Tools.Debugger.RebootOptions");
+    var rebootMi = rebootOptionsType == null ? null : engineType.GetMethod("RebootDevice", new[] { rebootOptionsType, typeof(IProgress<string>) });
+    if (rebootMi != null)
+    {
+        object hold = Enum.ToObject(rebootOptionsType!, 2 | 4); // ClrOnly | WaitForDebugger
+        rebootMi.Invoke(engine, new object?[] { hold, null });
+        bool back = false;
+        for (int i = 0; i < 20 && !back; i++)
+        {
+            Thread.Sleep(500);
+            try { back = (bool)connectMi.Invoke(engine, connectArgs)!; } catch { }
+        }
+        Console.WriteLine(back ? "CLR restarted and held for the deploy (app not running)." : "CLR hold reboot: no reconnect, deploying anyway.");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine("CLR hold reboot skipped (" + ex.GetType().Name + "): " + (ex.InnerException?.Message ?? ex.Message));
+}
+
 // Halt the running app BEFORE the flash write. A busy app (WebRTC link up + render loop +
 // HTTP server) starves the wire-protocol thread, so the final commit block times out
 // ("No reply from nanoDevice @ 0x3D1...") and the partial write bricks the deploy region -

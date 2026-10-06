@@ -39,3 +39,31 @@ html, body {
 }
 .mr-net:hover { border-color: var(--mr-accent); }
 .mr-net-on { border-color: var(--mr-accent); box-shadow: 0 0 0 1px var(--mr-accent) inset; }
+.mr-ok { color: #6fdc8c; }
+
+/* Drive view */
+.mr-shell-wide { max-width: 72rem; }
+.mr-drive { display: flex; flex-direction: column; gap: 0.75rem; }
+.mr-drive-top { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.mr-hud { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; font-variant-numeric: tabular-nums; font-size: 0.95rem;
+  padding: 0.5rem 0.75rem; border: 1px solid var(--mr-border); border-radius: 8px; background: var(--mr-surface); }
+.mr-banner { padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid currentColor; font-weight: 600; }
+.mr-video { aspect-ratio: 4 / 3; max-height: 55vh; width: 100%; display: flex; align-items: center; justify-content: center;
+  background: #000; border-radius: 8px; border: 1px solid var(--mr-border); }
+.mr-controls { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.mr-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; }
+.mr-keys { margin: 0; }
+
+/* Virtual thumbstick. touch-action: none stops the browser from scrolling or zooming while a finger drives. */
+.mr-stick { position: relative; flex: none; width: 150px; height: 150px; border-radius: 50%;
+  border: 2px solid var(--mr-border); background: var(--mr-surface); touch-action: none; user-select: none;
+  -webkit-user-select: none; display: flex; align-items: center; justify-content: center; }
+.mr-stick-on { border-color: var(--mr-accent); }
+.mr-stick-knob { width: 54px; height: 54px; border-radius: 50%; background: var(--mr-accent); opacity: 0.85; pointer-events: none; }
+.mr-stick-label { position: absolute; bottom: -1.5rem; color: var(--mr-muted); font-size: 0.85rem; pointer-events: none; }
+
+@media (max-width: 640px) {
+  .mr-controls { flex-wrap: wrap; justify-content: space-around; }
+  .mr-buttons { order: 3; width: 100%; }
+  .mr-stick { width: 130px; height: 130px; }
+}

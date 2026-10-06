@@ -6,6 +6,7 @@
     <Project Path="src/MiniRover.App/MiniRover.App.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/MiniRover.Client.Tests/MiniRover.Client.Tests.csproj" />
     <Project Path="tests/MiniRover.Protocol.Tests/MiniRover.Protocol.Tests.csproj" />
   </Folder>
 </Solution>

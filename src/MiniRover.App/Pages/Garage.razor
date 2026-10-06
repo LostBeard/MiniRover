@@ -19,16 +19,20 @@
                             · firmware @car.Firmware · paired @car.PairedUtc.ToLocalTime().ToString("d")
                         </div>
                     </div>
-                    <UiButton Secondary="true" OnClick="@(() => Forget(car))">Forget</UiButton>
+                    <UiStack Horizontal="true" Gap="0.5rem">
+                        <UiButton OnClick="@(() => OnDrive.InvokeAsync(car))" data-test="garage-drive">Drive</UiButton>
+                        <UiButton Secondary="true" OnClick="@(() => Forget(car))">Forget</UiButton>
+                    </UiStack>
                 </div>
             }
         </UiStack>
-        <p class="mr-muted">Driving, video and sensors are coming next. Pairing is done, so this car will connect as soon as they land.</p>
+        <p class="mr-muted">Switch the car on and press Drive. It connects through the internet, so it works on any WiFi the car knows.</p>
     }
 </UiCard>
 
 @code {
     [Parameter] public EventCallback OnAddCar { get; set; }
+    [Parameter] public EventCallback<SavedCar> OnDrive { get; set; }
 
     List<SavedCar> _cars = new();
 

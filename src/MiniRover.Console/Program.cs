@@ -7,6 +7,15 @@ using MiniRover.ConsoleApp;
 // minirover link [--car name] [--key hex] ["drive 40 40 1000; servo 90 120; ..."]   (see LinkCommand.cs)
 if (args.Length >= 1 && args[0] == "link") return await LinkCommand.RunAsync(args);
 
+// minirover drivetest <publish wwwroot> [httpPort] [cdpPort] [screenshotDir]   (THE WHEELS MUST BE OFF THE GROUND)
+if (args.Length >= 2 && args[0] == "drivetest")
+{
+    return await DriveTest.RunAsync(args[1],
+        args.Length > 2 ? int.Parse(args[2]) : 8641,
+        args.Length > 3 ? int.Parse(args[3]) : 9241,
+        args.Length > 4 ? args[4] : Path.Combine(Path.GetTempPath(), "minirover-drivetest-shots"));
+}
+
 // minirover webtest <publish wwwroot> <COMx> [httpPort] [cdpPort] [screenshotDir]
 if (args.Length >= 3 && args[0] == "webtest")
 {
