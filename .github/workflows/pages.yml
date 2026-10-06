@@ -1,0 +1,46 @@
+name: Deploy the web app to GitHub Pages
+
+# The browser app (src/MiniRover.App) is a static site: publish it and serve it from the gh-pages branch.
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'src/MiniRover.App/**'
+      - 'src/MiniRover.Client/**'
+      - 'src/MiniRover.Protocol/**'
+      - '.github/workflows/pages.yml'
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish the app
+        run: dotnet publish src/MiniRover.App -c Release --nologo --output publish
+
+      # The app loads everything with relative paths, so it works under /MiniRover/ without a <base> rewrite.
+      # 404.html = index.html so a reload on any app URL still starts the app; .nojekyll keeps _framework.
+      - name: Prepare for GitHub Pages
+        run: |
+          cp publish/wwwroot/index.html publish/wwwroot/404.html
+          touch publish/wwwroot/.nojekyll
+
+      - name: Push to gh-pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: publish/wwwroot
+          single-commit: true
