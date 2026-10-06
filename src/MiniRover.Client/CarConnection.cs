@@ -169,6 +169,14 @@ public sealed class CarConnection : IAsyncDisposable
         Send([CarLink.MsgServo, (byte)pan, (byte)(pan >> 8), (byte)tilt, (byte)(tilt >> 8)]);
     }
 
+    /// <summary>Starts or stops the camera stream on <see cref="VideoChannel"/>. 0 keeps the car's saved size / quality / fps.
+    /// Sizes: 6 = 320x240, 8 = 400x296, 10 = 640x480 (see the car's MiniRover.Native.Camera); quality 4..63, lower = better.</summary>
+    public void Video(bool enable, int frameSize = 0, int jpegQuality = 0, int maxFps = 0)
+        => Send(CarLink.EncodeVideo(enable, frameSize, jpegQuality, maxFps));
+
+    /// <summary>Changes a car setting ("camera.fps=10"); the car clamps it to a safe range, saves it and answers with a Text.</summary>
+    public void Setting(string keyValue) => Send(CarLink.EncodeSetting(keyValue));
+
     public void Leds(byte r, byte g, byte b) => Send([CarLink.MsgLeds, r, g, b]);
 
     public void Buzzer(int hz, int ms) => Send([CarLink.MsgBuzzer, (byte)hz, (byte)(hz >> 8), (byte)ms, (byte)(ms >> 8)]);

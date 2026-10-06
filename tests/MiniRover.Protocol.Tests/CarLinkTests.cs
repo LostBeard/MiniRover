@@ -125,3 +125,39 @@ public class CarLinkTests
         Assert.False(CarLink.TryDecodeTelemetry(b, b.Length - 1, d));
     }
 }
+
+public class CarLinkMessageTests
+{
+    [Fact]
+    public void Video_layout_and_clamping()
+    {
+        Assert.Equal(new byte[] { CarLink.MsgVideo, 1, 6, 12, 15 }, CarLink.EncodeVideo(true, 6, 12, 15));
+        Assert.Equal(new byte[] { CarLink.MsgVideo, 0, 0, 63, 30 }, CarLink.EncodeVideo(false, -5, 99, 500));
+    }
+
+    [Fact]
+    public void Setting_and_text_are_utf8_after_the_type_and_capped()
+    {
+        byte[] s = CarLink.EncodeSetting("camera.fps=10");
+        Assert.Equal(CarLink.MsgSetting, s[0]);
+        Assert.Equal("camera.fps=10", System.Text.Encoding.UTF8.GetString(s, 1, s.Length - 1));
+        Assert.Equal(1 + CarLink.MaxTextBytes, CarLink.EncodeText(new string('x', 5000)).Length);
+        Assert.Equal(new byte[] { CarLink.MsgText }, CarLink.EncodeText(null!));
+    }
+}
+
+public class CarLinkOffsetDecodeTests
+{
+    [Fact]
+    public void Drive_decodes_in_place_after_a_receive_header()
+    {
+        byte[] frame = CarLink.EncodeDrive(42, -55, 70, 300);
+        byte[] rx = new byte[2 + frame.Length + 5];
+        Array.Copy(frame, 0, rx, 2, frame.Length);
+        Assert.True(CarLink.TryDecodeDrive(rx, 2, frame.Length, out int s, out int l, out int r, out int h));
+        Assert.Equal((42, -55, 70, 300), (s, l, r, h));
+        // an offset that leaves too few bytes in the buffer is rejected, never read past the end
+        Assert.False(CarLink.TryDecodeDrive(rx, rx.Length - 3, frame.Length, out _, out _, out _, out _));
+        Assert.False(CarLink.TryDecodeDrive(rx, -1, frame.Length, out _, out _, out _, out _));
+    }
+}

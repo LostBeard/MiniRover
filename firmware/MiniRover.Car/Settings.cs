@@ -39,11 +39,65 @@ namespace MiniRover.Car
         /// <summary>20-byte signaling room key (hex) shared with paired browsers; empty until first pairing.</summary>
         public string RoomKeyHex { get => GetString("pair.roomkey", ""); set => SetString("pair.roomkey", value); }
 
-        /// <summary>Set when WiFi was just provisioned over BLE: on the next boot the car keeps advertising for a
-        /// while so the app can confirm it joined.</summary>
+        // Camera (Docs/hardware.md). Size = esp32-camera framesize (6 = 320x240), quality 0..63 (lower = better).
+        public int CameraSize { get => (int)GetDouble("camera.size", 6); set => Set("camera.size", value); }
+        public int CameraQuality { get => (int)GetDouble("camera.quality", 12); set => Set("camera.quality", value); }
+        public int CameraMaxFps { get => (int)GetDouble("camera.fps", 15); set => Set("camera.fps", value); }
+        // The FNK0053 head holds the sensor upside down: a true 180-degree rotation (flip + mirror) makes it upright and
+        // unmirrored. Verified on the real car by panning: at pan 160 (camera turned left) the scene moved right.
+        public bool CameraMirror { get => GetDouble("camera.mirror", 1) != 0; set => Set("camera.mirror", value ? 1 : 0); }
+        public bool CameraFlip { get => GetDouble("camera.flip", 1) != 0; set => Set("camera.flip", value ? 1 : 0); }
 
         /// <summary>Why the last WiFi connection attempt failed (shown to the app in setup mode).</summary>
         public string LastWifiError { get => GetString("wifi.error", ""); set => SetString("wifi.error", value); }
+
+        /// <summary>Every key a client may change (HTTP, BLE and the app link all go through <see cref="TryApply"/>).</summary>
+        public static readonly string[] ClientKeys =
+        {
+            "pan.trim", "tilt.trim", "battery.coef", "drive.limit", "motor.minduty", "led.brightness",
+            "camera.size", "camera.quality", "camera.fps", "camera.mirror", "camera.flip",
+            "motor0.invert", "motor1.invert", "motor2.invert", "motor3.invert",
+            "motor0.gain", "motor1.gain", "motor2.gain", "motor3.gain",
+        };
+
+        /// <summary>
+        /// Applies one "key=value" from a client, clamped to safe ranges (a bad value must never make the car unsafe:
+        /// a speed limit above 1, a battery coefficient that hides a flat pack). Does not save. False for an unknown key
+        /// or a value that is not a number.
+        /// </summary>
+        public bool TryApply(string kv)
+        {
+            int eq = kv == null ? -1 : kv.IndexOf('=');
+            if (eq <= 0) return false;
+            string key = kv.Substring(0, eq).Trim();
+            double v;
+            try { v = double.Parse(kv.Substring(eq + 1).Trim()); } catch { return false; }
+            switch (key)
+            {
+                case "pan.trim": PanTrim = Clamp(v, -30, 30); return true;
+                case "tilt.trim": TiltTrim = Clamp(v, -30, 30); return true;
+                case "battery.coef": BatteryCoefficient = Clamp(v, 2.5, 5.5); return true;
+                case "drive.limit": SpeedLimit = Clamp(v, 0, 1); return true;
+                case "motor.minduty": MotorMinimumDuty = (int)Clamp(v, 0, 4000); return true;
+                case "led.brightness": LedBrightness = (int)Clamp(v, 0, 255); return true;
+                case "camera.size": CameraSize = (int)Clamp(v, 1, 11); return true;
+                case "camera.quality": CameraQuality = (int)Clamp(v, 4, 63); return true;
+                case "camera.fps": CameraMaxFps = (int)Clamp(v, 1, 30); return true;
+                case "camera.mirror": CameraMirror = v != 0; return true;
+                case "camera.flip": CameraFlip = v != 0; return true;
+            }
+            // motorN.invert / motorN.gain, N = 0..3
+            if (key.Length >= 11 && key.StartsWith("motor") && key[5] >= '0' && key[5] <= '3')
+            {
+                int m = key[5] - '0';
+                string rest = key.Substring(6);
+                if (rest == ".invert") { SetMotorInverted(m, v != 0); return true; }
+                if (rest == ".gain") { SetMotorGain(m, Clamp(v, 0, 2)); return true; }
+            }
+            return false;
+        }
+
+        static double Clamp(double v, double lo, double hi) => v < lo ? lo : (v > hi ? hi : v);
 
         public static Settings Load()
         {

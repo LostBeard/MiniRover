@@ -19,6 +19,7 @@ namespace MiniRover.Car
         const int ConnectTimeoutMs = 30000;    // the ESP32 answers ICE checks late (SpawnWear: ~20 s worst case)
         const int ChannelOpenTimeoutMs = 10000;
         const int TelemetryPeriodMs = 200;
+        const int MaxMessagesPerPass = 16;
 
         readonly Car _car;
         readonly Settings _settings;
@@ -32,15 +33,28 @@ namespace MiniRover.Car
         byte[] _key;
         byte[] _carNonce;
         int _lastDriveSeq = -1;
+        bool _pendingDrive;
+        int _pendingLeft, _pendingRight, _pendingHold;
         int _telemetrySeq;
 
         public string Status { get; private set; } = "idle";
+        /// <summary>Control messages received from the app, and how many were drive commands (this session).</summary>
+        public int ControlMessages { get; private set; }
+        public int DriveMessages { get; private set; }
+        /// <summary>Telemetry messages queued this session, and sends refused because the transmit queue was full.</summary>
+        public int TelemetrySent { get; private set; }
+        public int SendFailures { get; private set; }
         public bool Authenticated { get; private set; }
         public int Sessions { get; private set; }
 
         /// <summary>Handle and video stream id for the native camera task (MiniRover.Native), -1 when not streaming.</summary>
         public int VideoHandle => Authenticated ? _handle : -1;
         public int VideoStreamId => Authenticated ? _videoSid : -1;
+
+        /// <summary>Camera frames the link skipped because the previous one was still being sent (latest wins).</summary>
+        public int TxQueuedBytes => _handle >= 0 ? PeerConnection.GetStat(_handle, PeerConnection.StatTxQueuedBytes) : 0;
+
+        public int VideoFramesDropped => _handle >= 0 ? PeerConnection.GetStat(_handle, PeerConnection.StatFramesDropped) : 0;
 
         public RtcLinkService(Car car, Settings settings, string name)
         {
@@ -65,7 +79,7 @@ namespace MiniRover.Car
                 catch (Exception ex)
                 {
                     Status = "error: " + ex.Message;
-                    System.Diagnostics.Debug.WriteLine("Link: " + Status);
+                    System.Diagnostics.Debug.WriteLine("Link: " + Status + " [" + Program.MemoryText() + "]");
                 }
                 finally
                 {
@@ -138,17 +152,28 @@ namespace MiniRover.Car
             long nextTelemetry = 0;
             while (PeerConnection.GetState(_handle) == PeerConnection.StateCompleted)
             {
-                int n;
-                while ((n = PeerConnection.TryReceive(_handle, _rx)) > 0)
+                // Drain a bounded batch, then always fall through to telemetry: with video running the car handled only
+                // ~12 drive messages/s, the app sent 20/s, and an unbounded drain never reached the telemetry send.
+                // Drive commands are coalesced: only the newest one in the batch moves the motors.
+                int n, batch = 0;
+                _pendingDrive = false;
+                while (batch < MaxMessagesPerPass && (n = PeerConnection.TryReceive(_handle, _rx)) > 0)
                 {
+                    batch++;
                     int sid = _rx[0] | (_rx[1] << 8);
                     if (sid != _ctrlSid) continue; // the app never sends on video
+                    ControlMessages++;
                     Handle(n - PeerConnection.ReceiveHeaderBytes);
+                }
+                if (_pendingDrive && _car.Drive != null)
+                {
+                    _car.Drive.Drive(_pendingLeft / 100.0, _pendingRight / 100.0, _pendingHold);
                 }
                 if (Authenticated && Environment.TickCount64 >= nextTelemetry)
                 {
                     nextTelemetry = Environment.TickCount64 + TelemetryPeriodMs;
                     Send(CarLink.EncodeTelemetry(BuildTelemetry()));
+                    TelemetrySent++;
                 }
                 Thread.Sleep(10);
             }
@@ -182,17 +207,20 @@ namespace MiniRover.Car
             switch (type)
             {
                 case CarLink.MsgDrive:
-                    byte[] frame = new byte[len];
-                    Array.Copy(_rx, o, frame, 0, len);
+                    DriveMessages++;
                     int seq, l, r, hold;
-                    if (_car.Drive != null && CarLink.TryDecodeDrive(frame, len, out seq, out l, out r, out hold) &&
+                    if (CarLink.TryDecodeDrive(_rx, o, len, out seq, out l, out r, out hold) &&
                         (_lastDriveSeq < 0 || CarLink.IsNewer(seq, _lastDriveSeq)))
                     {
                         _lastDriveSeq = seq; // stale or duplicated frames never move the car backwards in time
-                        _car.Drive.Drive(l / 100.0, r / 100.0, hold);
+                        _pendingDrive = true; // applied once after the batch (the newest wins)
+                        _pendingLeft = l;
+                        _pendingRight = r;
+                        _pendingHold = hold;
                     }
                     break;
                 case CarLink.MsgStop:
+                    _pendingDrive = false; // a Stop after a Drive in the same batch wins
                     if (_car.Drive != null) _car.Drive.Stop();
                     break;
                 case CarLink.MsgServo:
@@ -215,6 +243,31 @@ namespace MiniRover.Car
                         int hz = _rx[o + 1] | (_rx[o + 2] << 8);
                         int ms = _rx[o + 3] | (_rx[o + 4] << 8);
                         new Thread(() => _car.Buzzer.Beep(hz, ms > 2000 ? 2000 : ms)).Start();
+                    }
+                    break;
+                case CarLink.MsgVideo:
+                    // [enable][frame size][jpeg quality][max fps]; 0 for size/quality/fps keeps the car's setting.
+                    if (len >= 5 && _car.CameraSensor > 0)
+                    {
+                        bool on = _rx[o + 1] != 0;
+                        int size = _rx[o + 2] != 0 ? _rx[o + 2] : _car.Settings.CameraSize;
+                        int quality = _rx[o + 3] != 0 ? _rx[o + 3] : _car.Settings.CameraQuality;
+                        int fps = _rx[o + 4] != 0 ? _rx[o + 4] : _car.Settings.CameraMaxFps;
+                        MiniRover.Native.Camera.Configure(size, quality);
+                        if (on) MiniRover.Native.Camera.Stream(_handle, _videoSid, fps);
+                        else MiniRover.Native.Camera.Stream(-1, -1, 1);
+                    }
+                    break;
+                case CarLink.MsgSetting:
+                    {
+                        string kv = Encoding.UTF8.GetString(_rx, o + 1, len - 1);
+                        bool ok = _car.Settings.TryApply(kv);
+                        if (ok)
+                        {
+                            _car.Settings.Save();
+                            _car.ApplySettings();
+                        }
+                        Send(CarLink.EncodeText((ok ? "saved " : "refused ") + kv));
                     }
                     break;
                 case CarLink.MsgEyes:
@@ -247,13 +300,14 @@ namespace MiniRover.Car
                 t.TiltTenths = (int)(_car.Servos.Tilt * 10);
             }
             try { t.Rssi = MiniRover.Native.Board.WifiRssi(); } catch { } // so the driver sees the car going out of range
+            if (_car.CameraSensor > 0) t.VideoFps = (MiniRover.Native.Camera.GetStat(MiniRover.Native.Camera.StatFpsTenths) + 5) / 10;
             t.FreeHeapKb = PeerConnection.GetStat(_handle, PeerConnection.StatFreeInternalBytes) / 1024;
             return t;
         }
 
         void Send(byte[] message)
         {
-            if (_handle >= 0 && _ctrlSid >= 0) PeerConnection.Send(_handle, _ctrlSid, message, message.Length);
+            if (_handle >= 0 && _ctrlSid >= 0 && PeerConnection.Send(_handle, _ctrlSid, message, message.Length) < 0) SendFailures++;
         }
 
         string WaitForLocalSdp(int timeoutMs)
@@ -277,6 +331,8 @@ namespace MiniRover.Car
         {
             bool wasAuthenticated = Authenticated;
             Authenticated = false;
+            // Stop the camera task sending before the connection (and its handle) goes away.
+            if (_car.CameraSensor > 0) { try { MiniRover.Native.Camera.Stream(-1, -1, 1); } catch { } }
             if (_car.Drive != null && wasAuthenticated) _car.Drive.Stop();
             if (_handle >= 0)
             {
@@ -285,6 +341,7 @@ namespace MiniRover.Car
             _handle = -1;
             _ctrlSid = _videoSid = -1;
             _lastDriveSeq = -1;
+            ControlMessages = DriveMessages = TelemetrySent = SendFailures = 0;
         }
 
         /// <summary>A 20-byte tracker id: the prefix then random printable ASCII.</summary>

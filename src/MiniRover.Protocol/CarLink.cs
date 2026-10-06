@@ -143,13 +143,17 @@ namespace MiniRover.Protocol
         }
 
         public static bool TryDecodeDrive(byte[] b, int length, out int seq, out int leftPercent, out int rightPercent, out int holdMs)
+            => TryDecodeDrive(b, 0, length, out seq, out leftPercent, out rightPercent, out holdMs);
+
+        /// <summary>Decodes a Drive message starting at <paramref name="offset"/> (no copy: the car decodes in its receive buffer).</summary>
+        public static bool TryDecodeDrive(byte[] b, int offset, int length, out int seq, out int leftPercent, out int rightPercent, out int holdMs)
         {
             seq = leftPercent = rightPercent = holdMs = 0;
-            if (b == null || length < DriveBytes || b[0] != MsgDrive) return false;
-            seq = b[1] | (b[2] << 8);
-            leftPercent = Clamp((sbyte)b[3], -100, 100);
-            rightPercent = Clamp((sbyte)b[4], -100, 100);
-            holdMs = b[5] | (b[6] << 8);
+            if (b == null || offset < 0 || length < DriveBytes || b.Length - offset < DriveBytes || b[offset] != MsgDrive) return false;
+            seq = b[offset + 1] | (b[offset + 2] << 8);
+            leftPercent = Clamp((sbyte)b[offset + 3], -100, 100);
+            rightPercent = Clamp((sbyte)b[offset + 4], -100, 100);
+            holdMs = b[offset + 5] | (b[offset + 6] << 8);
             return true;
         }
 
@@ -158,6 +162,36 @@ namespace MiniRover.Protocol
         {
             int d = (seq - last) & 0xFFFF;
             return d != 0 && d < 0x8000;
+        }
+
+        // ---- Text / Setting / Video ----
+
+        /// <summary>[type][UTF-8 text], capped so a message always fits one SCTP chunk.</summary>
+        public static byte[] EncodeText(string text) => EncodeUtf8(MsgText, text);
+
+        /// <summary>A "key=value" setting for the car (it clamps values to safe ranges and answers with a Text).</summary>
+        public static byte[] EncodeSetting(string keyValue) => EncodeUtf8(MsgSetting, keyValue);
+
+        /// <summary>Video on/off. 0 for size, quality or fps keeps the car's saved setting.</summary>
+        public static byte[] EncodeVideo(bool enable, int frameSize, int jpegQuality, int maxFps)
+        {
+            return new byte[]
+            {
+                MsgVideo, (byte)(enable ? 1 : 0),
+                (byte)Clamp(frameSize, 0, 255), (byte)Clamp(jpegQuality, 0, 63), (byte)Clamp(maxFps, 0, 30),
+            };
+        }
+
+        public const int MaxTextBytes = 512;
+
+        static byte[] EncodeUtf8(byte type, string text)
+        {
+            byte[] t = Encoding.UTF8.GetBytes(text ?? "");
+            int len = t.Length > MaxTextBytes ? MaxTextBytes : t.Length;
+            byte[] b = new byte[1 + len];
+            b[0] = type;
+            Array.Copy(t, 0, b, 1, len);
+            return b;
         }
 
         // ---- Telemetry ----

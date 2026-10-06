@@ -373,32 +373,7 @@ namespace MiniRover.Car
 
         bool ApplySetting(string kv)
         {
-            int eq = kv.IndexOf('=');
-            if (eq <= 0) return false;
-            string key = kv.Substring(0, eq);
-            double v;
-            try { v = double.Parse(kv.Substring(eq + 1)); } catch { return false; }
-            switch (key)
-            {
-                case "pan.trim": _settings.PanTrim = v; break;
-                case "tilt.trim": _settings.TiltTrim = v; break;
-                case "battery.coef": _settings.BatteryCoefficient = v; break;
-                case "drive.limit": _settings.SpeedLimit = v; break;
-                case "motor.minduty": _settings.MotorMinimumDuty = (int)v; break;
-                case "led.brightness": _settings.LedBrightness = (int)v; break;
-                default:
-                    if (key.Length == 13 && key.StartsWith("motor") && key.Substring(6) == ".invert")
-                    {
-                        _settings.SetMotorInverted(key[5] - '0', v != 0);
-                        break;
-                    }
-                    if (key.Length == 11 && key.StartsWith("motor") && key.Substring(6) == ".gain")
-                    {
-                        _settings.SetMotorGain(key[5] - '0', v);
-                        break;
-                    }
-                    return false;
-            }
+            if (!_settings.TryApply(kv)) return false;
             _settings.Save();
             _car.ApplySettings();
             return true;

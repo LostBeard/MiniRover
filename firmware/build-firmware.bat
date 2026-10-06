@@ -33,7 +33,8 @@ set "MRN_DIR=%~dp0native\MiniRover.Native"
 set "MRN_CMAKE=%MRN_DIR:\=/%"
 set "INTEROP_ASSEMBLIES=SpawnDev.nanoFramework.WebRTC MiniRover.Native"
 set "INTEROP_PATHS=%SDNF_CMAKE%/native/SpawnDev.nanoFramework.WebRTC;%MRN_CMAKE%"
-set "EXTRA_COMPONENTS=%SDNF_CMAKE%/native/components/libpeer"
+REM Extra IDF components (CMake list): our libpeer, plus esp32-camera + esp_jpeg vendored in native/components.
+set "EXTRA_COMPONENTS=%SDNF_CMAKE%/native/components/libpeer;%MRN_CMAKE%/../components/esp32-camera;%MRN_CMAKE%/../components/esp_jpeg"
 
 if not exist "%NF_DIR%\targets\ESP32\defconfig\MINIROVER_ESP32_defconfig" (
     echo [ERROR] %NF_DIR% is not the minirover/esp32-wrover nf-interpreter branch.

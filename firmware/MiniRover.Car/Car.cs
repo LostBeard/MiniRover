@@ -30,6 +30,8 @@ namespace MiniRover.Car
         /// <summary>A battery pack was detected at boot (false = USB power only).</summary>
         public bool HasBattery;
         public uint LastIrCode;
+        /// <summary>Camera sensor id (MiniRover.Native.Camera.Sensor*), 0 when no camera answered.</summary>
+        public int CameraSensor;
         /// <summary>Environment.TickCount64 when the last IR code arrived; 0 = none yet.</summary>
         public long LastIrMs;
 
@@ -123,8 +125,24 @@ namespace MiniRover.Car
             }
         }
 
+        /// <summary>Starts the camera head if one is fitted (the ultrasonic head has none). Not a fault when absent.</summary>
+        public void InitCamera()
+        {
+            int r = MiniRover.Native.Camera.Init(Settings.CameraSize, Settings.CameraQuality);
+            CameraSensor = r > 0 ? r : 0;
+            if (CameraSensor > 0) MiniRover.Native.Camera.SetOrientation(Settings.CameraMirror, Settings.CameraFlip);
+            System.Diagnostics.Debug.WriteLine(CameraSensor > 0
+                ? "Camera: sensor 0x" + CameraSensor.ToString("X2") + (CameraSensor == MiniRover.Native.Camera.SensorGC0308 ? " (GC0308, software JPEG)" : CameraSensor == MiniRover.Native.Camera.SensorOV2640 ? " (OV2640)" : "")
+                : "Camera: none found (error " + r + ")");
+        }
+
         public void ApplySettings()
         {
+            if (CameraSensor > 0)
+            {
+                MiniRover.Native.Camera.Configure(Settings.CameraSize, Settings.CameraQuality);
+                MiniRover.Native.Camera.SetOrientation(Settings.CameraMirror, Settings.CameraFlip);
+            }
             if (Servos != null)
             {
                 Servos.PanTrim = Settings.PanTrim;

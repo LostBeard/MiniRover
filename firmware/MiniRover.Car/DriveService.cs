@@ -20,6 +20,8 @@ namespace MiniRover.Car
         readonly Motors _motors;
         readonly Settings _settings;
         readonly object _lock = new object();
+        double _lastLeft, _lastRight;
+        bool _sidesSet; // false whenever the motors were changed by anything other than Drive()
         // Monotonic milliseconds (Environment.TickCount64), never the wall clock: a time sync that steps the clock
         // BACKWARD would push a wall-clock deadline into the future and keep the motors running.
         long _deadlineMs;
@@ -57,9 +59,19 @@ namespace MiniRover.Car
             if (holdMs <= 0) holdMs = DefaultHoldMs;
             if (holdMs > MaxHoldMs) holdMs = MaxHoldMs;
 
+            double l = Clamp(left) * limit, r = Clamp(right) * limit;
             lock (_lock)
             {
-                _motors.SetSides(Clamp(left) * limit, Clamp(right) * limit);
+                // A held stick repeats the same command 10-20 times a second: only the deadline needs refreshing.
+                // Skipping the identical I2C writes kept the car's command loop from falling behind (measured: with
+                // video running, 20 Hz of motor writes backed up the queue and starved telemetry).
+                if (!_sidesSet || l != _lastLeft || r != _lastRight)
+                {
+                    _motors.SetSides(l, r);
+                    _lastLeft = l;
+                    _lastRight = r;
+                    _sidesSet = true;
+                }
                 _deadlineMs = Environment.TickCount64 + holdMs;
             }
         }
@@ -78,6 +90,7 @@ namespace MiniRover.Car
 
             lock (_lock)
             {
+                _sidesSet = false;
                 _motors.Set(motor, Clamp(speed) * limit);
                 _deadlineMs = Environment.TickCount64 + holdMs;
             }
@@ -87,6 +100,7 @@ namespace MiniRover.Car
         {
             lock (_lock)
             {
+                _sidesSet = false;
                 _motors.StopAll();
                 _deadlineMs = 0;
             }
@@ -115,6 +129,7 @@ namespace MiniRover.Car
                         {
                             DeadmanStops++;
                         }
+                        _sidesSet = false;
                         _motors.StopAll();
                         _deadlineMs = 0;
                     }

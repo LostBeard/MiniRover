@@ -16,6 +16,7 @@
             @BatteryText
         </span>
         <span class="@WifiClass" title="The car's WiFi signal" data-test="hud-wifi" data-rssi="@(_t?.Rssi ?? 0)">@WifiText</span>
+        <span title="Video frames per second sent by the car" data-test="hud-video">video @(_t?.VideoFps.ToString() ?? "-") fps</span>
         <span title="Light sensor">light @(_t?.Light.ToString() ?? "-")</span>
         <span title="Line sensors (left, middle, right)" data-test="hud-line">line @LineText</span>
         <span title="Telemetry from the car per second" data-test="hud-rate">@(_rate < 0 ? "-" : _rate.ToString())/s</span>
@@ -28,9 +29,7 @@
         <div class="mr-banner mr-warn" data-test="drive-wifi-warning">@wifiWarning</div>
     }
 
-    <div class="mr-video" data-test="drive-video">
-        <span class="mr-muted">Live video arrives with the camera firmware (next step).</span>
-    </div>
+    <VideoView Channel="_video" />
 
     <div class="mr-controls">
         <Stick Label="Drive" TestId="stick-drive" OnMove="OnDriveStick" />
@@ -58,6 +57,7 @@
     readonly DriveMixer _mixer = new() { SpeedLimit = 0.6 };
     readonly CancellationTokenSource _cts = new();
     CarLink.Telemetry? _t;
+    SpawnDev.RTC.IRTCDataChannel? _video;
     string _state = "connecting", _status = "connecting...";
     int _rate = -1, _frames; // -1 until the first full second has been counted
     bool _lights, _wasDriving;
@@ -99,6 +99,7 @@
             _link.OnStatus += s => { _status = s; _ = InvokeAsync(StateHasChanged); };
             _link.OnTelemetry += t => { _t = t; _frames++; };
             _link.OnDisconnected += () => { _state = "disconnected"; _ = InvokeAsync(StateHasChanged); };
+            _link.OnVideoChannel += ch => { _video = ch; _ = InvokeAsync(StateHasChanged); };
             _status = "looking for " + Car.Name + "... (is it switched on?)";
             StateHasChanged();
             using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token))
@@ -108,6 +109,8 @@
             }
             _state = "connected";
             _status = "connected";
+            _video ??= _link.VideoChannel;
+            _link.Video(true); // the car's saved size / quality / fps
             CenterCamera();
             StateHasChanged();
             await ControlLoop();
@@ -308,7 +311,7 @@
         }
         if (_link != null)
         {
-            try { if (_link.IsConnected) _link.Stop(); } catch { }
+            try { if (_link.IsConnected) { _link.Stop(); _link.Video(false); } } catch { }
             await _link.DisposeAsync();
         }
     }

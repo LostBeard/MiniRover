@@ -60,7 +60,20 @@ public static class DriveTest
             int rssi = await WaitForIntAsync(cdp, "[data-test=hud-wifi]", "data-rssi", v => v != 0, "WiFi signal telemetry");
             string hud = (await EvalAsync(cdp, Deep("[data-test=drive-hud]") + ".textContent.replace(/\\s+/g,' ').trim()")).GetValue<string>();
             Console.WriteLine($"PASS telemetry: battery {mv / 1000.0:F2} V, WiFi {rssi} dBm; HUD: {hud}");
+            // Video: JPEG frames from the car decoded onto the canvas (the data-frames hook counts decoded frames).
+            sw.Restart();
+            int frames = await WaitForIntAsync(cdp, "[data-test=drive-video]", "data-frames", v => v >= 30, "30 decoded video frames");
+            int f0 = frames;
+            await Task.Delay(3000);
+            int f1 = await WaitForIntAsync(cdp, "[data-test=drive-video]", "data-frames", v => v > f0, "more decoded frames");
+            JsonNode size = await EvalAsync(cdp, "(()=>{const c=" + Deep("[data-test=drive-video] canvas") + ";return {w:c.width,h:c.height};})()");
+            Console.WriteLine($"PASS video: first 30 frames decoded within {sw.ElapsedMilliseconds} ms, then {(f1 - f0) / 3.0:F1} fps decoded, canvas {size["w"]}x{size["h"]}");
             await cdp.ScreenshotAsync(Path.Combine(shotDir, "drive-1-connected.png"));
+
+            // Telemetry must keep flowing while video streams (it once starved: the car fell behind on commands).
+            string rateText = (await EvalAsync(cdp, Deep("[data-test=hud-rate]") + ".textContent")).GetValue<string>();
+            if (!int.TryParse(rateText.Split('/')[0], out int rate) || rate < 3) throw new Exception($"FAIL telemetry during video is {rateText}, want >= 3/s");
+            Console.WriteLine($"PASS telemetry during video: {rateText}");
 
             // Touch: a real touch drag straight up on the drive stick (full deflection), held, then released.
             JsonNode rect = await EvalAsync(cdp, "(()=>{const r=" + Deep("[data-test=stick-drive]") + ".getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()");

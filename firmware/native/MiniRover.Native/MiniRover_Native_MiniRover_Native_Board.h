@@ -26,6 +26,8 @@ namespace MiniRover_Native
 
             static bool SetWifiPowerSave( bool param0, HRESULT &hr );
 
+            static signed int FreeMemory( signed int param0, HRESULT &hr );
+
         };
     }
 }

@@ -20,5 +20,16 @@ namespace MiniRover.Native
         /// </summary>
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern bool SetWifiPowerSave(bool enabled);
+
+        public const int MemInternalFree = 0;
+        public const int MemInternalLargest = 1;
+        public const int MemPsramFree = 2;
+        public const int MemPsramLargest = 3;
+        public const int MemDmaFree = 4;
+        public const int MemInternalMinimumEver = 5;
+
+        /// <summary>Native heap numbers in bytes (Mem* ids). Internal RAM is what runs out first on this board.</summary>
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern int FreeMemory(int kind);
     }
 }

@@ -39,7 +39,8 @@ Hardware details: [Docs/hardware.md](Docs/hardware.md). System overview: [Docs/a
 firmware/
   MiniRover.Car/            nanoFramework app: services (drive, servo, lights, matrix, buzzer, sensors, battery, link, setup)
   MiniRover.Car.Drivers/    board drivers (separate assembly: nanoFramework has a per-assembly size cap)
-  native/MiniRover.Camera/  C++ interop: camera init, sensor detect, JPEG -> data channel task
+  MiniRover.Native/         interop assembly (managed side): Camera, Board (WiFi signal, power save, memory)
+  native/MiniRover.Native/  its C++: camera task (JPEG -> data channel), RSSI, memory; native/components: esp32-camera, esp_jpeg
   nf-preset/                firmware build preset, sdkconfig, 4 MB partition table
 src/
   MiniRover.Protocol/       shared message definitions (net10.0)
@@ -69,7 +70,9 @@ tests/
 - [x] Native slots freed on a CLR soft reboot (a deploy left the old program's connection holding ~190 KB; measured)
 - [x] `DataChannel.Open` waits for SCTP: ICE "completed" comes before the SCTP association (six sessions in a row failed on the car)
 - [ ] Ed25519 / X25519 (Monocypher) moved from SpawnWear
-- [ ] Split the managed signaling code into its own assembly: ANY change to the interop assembly changes its checksum and forces a firmware rebuild (measured 0xBF64AE07 -> 0x846AB963 for one managed class)
+- [ ] Split the managed signaling code into its own assembly: any new or changed METHOD in the interop assembly changes its checksum and forces a firmware rebuild (measured 0xBF64AE07 -> 0x846AB963 for one managed method; constants do not)
+- [x] libpeer send path: bounded retry when network buffers are full + send error/retry counters (StatUdpSendErrors/Retries)
+- [ ] libpeer SCTP never retransmits and never sends FORWARD-TSN: on a lossy network a lost video chunk leaves a permanent hole in the receiver's sequence. Measured loss on the LAN: 0 errors over 90 s; one early test lost 46% (cause not proven). Implement PR-SCTP (FORWARD-TSN) for video + retransmission for ctrl before driving over the internet
 - [ ] SpawnWear rebuilt and verified on the shared library (Riker's call)
 
 ### Phase 1 - Car bring-up
@@ -87,12 +90,15 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 
 ### Phase 2 - Custom firmware with WebRTC and camera
 - [x] Firmware preset for the classic ESP32-WROVER: libpeer + shared WebRTC interop + NimBLE (BLE setup); IPv6, PSRAM lwIP
-- [x] Fits the 4 MB flash: nanoCLR 0x1a3c90, 10% of the app partition free (grow the partition if the camera does not fit)
+- [x] Fits the 4 MB flash with the camera: nanoCLR 0x1ac660, 8% of the app partition free
 - [x] DTLS + SCTP + two data channels with the desktop client (SipSorcery via SpawnDev.RTC)
 - [x] DTLS + data channels with Chrome (the browser app): connect + authenticate in 6.8-8.3 s (`minirover drivetest`)
-- [ ] Native JPEG task (esp32-camera, OV2640 / GC0308 detect); measure fps and latency vs resolution and quality
+- [x] Native camera task (esp32-camera, OV2640 / GC0308 detected; GC0308 gets software JPEG): OV2640 320x240 q12 = ~6 KB/frame, 14.6 fps over 90 s to the desktop, 14.7 fps decoded in Chrome
+- [ ] Measure fps / latency at other sizes and qualities; glass-to-glass latency; a real GC0308
 - [x] `MiniRover.Native` interop (firmware/native): WiFi RSSI of the connected access point, WiFi modem sleep control
-- [ ] Free internal heap: 29 KB with a session up during the boot BLE window, 82 KB after it (measured): watch it when the camera lands
+- [x] Memory budget with camera + BLE + WebRTC (measured per boot step; see the sdkconfig comments): internal 27 KB during the BLE window (was 2 KB), PSRAM 650+ KB native free (was 3 KB)
+- [x] Car command loop under video load: bounded receive batches, newest drive wins, identical motor writes skipped (telemetry had stopped completely while driving with video)
+- [ ] Pin the WebRTC pump and camera tasks to core 0 (the CLR has core 1) if the command loop needs more headroom
 
 ### Phase 3 - Protocol and link
 - [x] Shared protocol `CarLink` (handshake, drive, servo, lights, buzzer, eyes, stop, telemetry), compiled into both runtimes; 37 tests
@@ -111,7 +117,8 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [x] Connect over WebRTC from the garage (Drive button)
 - [ ] Auto-reconnect after a drop; several cars at once
 - [x] Drive page HUD: battery % (Li-ion curve) + volts, WiFi signal bars + dBm with an out-of-range warning, line + light sensors, telemetry rate, car memory
-- [ ] Drive page: video, link RTT, fps, distance, full screen + wake lock
+- [x] Drive page video: canvas, browser JPEG decode, newest frame wins, bytes never enter .NET; HUD shows the car's video fps
+- [ ] Drive page: link RTT, distance, full screen + wake lock
 - [x] Touch sticks (pointer capture; drive + camera aim), keyboard (WASD / arrows, keys dropped on window blur), speed levels: touch drag and key W verified moving the real car from Chrome, release stops it (125-314 ms to telemetry "stopped")
 - [ ] Gamepad (standard mapping, triggers + sticks, A/B/Y): written, not yet tried with a real pad; rumble
 - [x] Lights toggle, horn

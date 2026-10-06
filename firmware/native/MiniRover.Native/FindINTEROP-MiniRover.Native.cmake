@@ -13,11 +13,17 @@ list(APPEND MiniRover.Native_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/src/CLR/Include)
 list(APPEND MiniRover.Native_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/src/HAL/Include)
 list(APPEND MiniRover.Native_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/src/PAL/Include)
 list(APPEND MiniRover.Native_INCLUDE_DIRS ${BASE_PATH_FOR_THIS_MODULE})
+# esp32-camera + esp_jpeg public headers (the components themselves are added through NF_EXTRA_IDF_COMPONENT_DIRS)
+list(APPEND MiniRover.Native_INCLUDE_DIRS ${BASE_PATH_FOR_THIS_MODULE}/../components/esp32-camera/driver/include)
+list(APPEND MiniRover.Native_INCLUDE_DIRS ${BASE_PATH_FOR_THIS_MODULE}/../components/esp32-camera/conversions/include)
+list(APPEND MiniRover.Native_INCLUDE_DIRS ${BASE_PATH_FOR_THIS_MODULE}/../components/esp_jpeg/include)
 
 set(MiniRover.Native_SRCS
     MiniRover_Native.cpp
     MiniRover_Native_MiniRover_Native_Board_mshl.cpp
     MiniRover_Native_MiniRover_Native_Board.cpp
+    MiniRover_Native_MiniRover_Native_Camera_mshl.cpp
+    MiniRover_Native_MiniRover_Native_Camera.cpp
 )
 
 foreach(SRC_FILE ${MiniRover.Native_SRCS})

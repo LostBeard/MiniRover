@@ -160,18 +160,13 @@ namespace MiniRover.Car
         void ApplySettings(HttpRequest r)
         {
             Settings s = _car.Settings;
-            if (r.Get("pan.trim") != null) s.PanTrim = r.GetDouble("pan.trim", 0);
-            if (r.Get("tilt.trim") != null) s.TiltTrim = r.GetDouble("tilt.trim", 0);
-            if (r.Get("battery.coef") != null) s.BatteryCoefficient = r.GetDouble("battery.coef", 3.7);
-            if (r.Get("drive.limit") != null) s.SpeedLimit = r.GetDouble("drive.limit", 1);
-            if (r.Get("motor.minduty") != null) s.MotorMinimumDuty = (int)r.GetDouble("motor.minduty", 1600);
-            if (r.Get("led.brightness") != null) s.LedBrightness = (int)r.GetDouble("led.brightness", 64);
-            for (int m = 0; m < Motors.Count; m++)
+            bool any = false;
+            foreach (string key in Settings.ClientKeys)
             {
-                string k = "motor" + m;
-                if (r.Get(k + ".invert") != null) s.SetMotorInverted(m, r.Get(k + ".invert") == "1");
-                if (r.Get(k + ".gain") != null) s.SetMotorGain(m, r.GetDouble(k + ".gain", 1));
+                string v = r.Get(key);
+                if (v != null && s.TryApply(key + "=" + v)) any = true;
             }
+            if (!any) return;
             s.Save();
             _car.ApplySettings();
         }
@@ -185,6 +180,21 @@ namespace MiniRover.Car
             int rssi = 0;
             try { rssi = MiniRover.Native.Board.WifiRssi(); } catch { }
             sb.Append(",\"rssi\":").Append(rssi.ToString());
+            sb.Append(",\"memoryKb\":{\"internal\":").Append((MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.MemInternalFree) / 1024).ToString())
+              .Append(",\"internalBlock\":").Append((MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.MemInternalLargest) / 1024).ToString())
+              .Append(",\"internalMinimum\":").Append((MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.MemInternalMinimumEver) / 1024).ToString())
+              .Append(",\"psram\":").Append((MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.MemPsramFree) / 1024).ToString())
+              .Append(",\"psramBlock\":").Append((MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.MemPsramLargest) / 1024).ToString()).Append('}');
+            sb.Append(",\"camera\":{\"sensor\":").Append(_car.CameraSensor.ToString());
+            if (_car.CameraSensor > 0)
+            {
+                sb.Append(",\"fpsTenths\":").Append(MiniRover.Native.Camera.GetStat(MiniRover.Native.Camera.StatFpsTenths).ToString())
+                  .Append(",\"framesSent\":").Append(MiniRover.Native.Camera.GetStat(MiniRover.Native.Camera.StatFramesSent).ToString())
+                  .Append(",\"lastFrameBytes\":").Append(MiniRover.Native.Camera.GetStat(MiniRover.Native.Camera.StatLastFrameBytes).ToString())
+                  .Append(",\"captureErrors\":").Append(MiniRover.Native.Camera.GetStat(MiniRover.Native.Camera.StatCaptureErrors).ToString())
+                  .Append(",\"encodeMs\":").Append(MiniRover.Native.Camera.GetStat(MiniRover.Native.Camera.StatEncodeMs).ToString());
+            }
+            sb.Append('}');
             sb.Append(",\"managedBytesInUse\":").Append(System.GC.GetTotalMemory(false).ToString());
             string faults = _car.Faults;
             if (_http.StartError.Length > 0) faults += (faults.Length > 0 ? "; " : "") + _http.StartError;
@@ -192,7 +202,15 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
             if (Link != null)
             {
                 sb.Append(",\"link\":{\"status\":\"").Append(JsonEscape(Link.Status)).Append("\",\"authenticated\":").Append(B(Link.Authenticated))
-                  .Append(",\"sessions\":").Append(Link.Sessions.ToString()).Append('}');
+                  .Append(",\"sessions\":").Append(Link.Sessions.ToString())
+                  .Append(",\"controlMessages\":").Append(Link.ControlMessages.ToString())
+                  .Append(",\"driveMessages\":").Append(Link.DriveMessages.ToString())
+                  .Append(",\"telemetrySent\":").Append(Link.TelemetrySent.ToString())
+                  .Append(",\"sendFailures\":").Append(Link.SendFailures.ToString())
+                  .Append(",\"txQueuedBytes\":").Append(Link.TxQueuedBytes.ToString())
+                  .Append(",\"udpSendErrors\":").Append(SpawnDev.nanoFramework.WebRTC.PeerConnection.GetStat(-1, SpawnDev.nanoFramework.WebRTC.PeerConnection.StatUdpSendErrors).ToString())
+                  .Append(",\"udpSendRetries\":").Append(SpawnDev.nanoFramework.WebRTC.PeerConnection.GetStat(-1, SpawnDev.nanoFramework.WebRTC.PeerConnection.StatUdpSendRetries).ToString())
+                  .Append(",\"videoFramesDropped\":").Append(Link.VideoFramesDropped.ToString()).Append('}');
             }
 
             BatteryService b = _car.Battery;

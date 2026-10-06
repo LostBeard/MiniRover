@@ -17,7 +17,14 @@ The `MINIROVER_ESP32` target fixes this and prepares the board for WebRTC:
 - IPv6, DTLS and PSRAM settings needed by the WebRTC stack (libpeer);
 - 240 MHz CPU;
 - WebRTC data channels compiled in: the `SpawnDev.nanoFramework.WebRTC` interop assembly and its patched libpeer, which the build uses instead of the ESP-IDF registry copy;
+- the camera: esp32-camera + esp_jpeg (vendored in `firmware/native/components`, see the README there) and MiniRover's own interop assembly `MiniRover.Native` (`firmware/native/MiniRover.Native`: camera task, WiFi signal and power save, memory numbers);
+- BLE (NimBLE) for setup from the web app;
+- a memory budget that lets WebRTC, BLE and the camera run together: 1 MB of PSRAM reserved for native code, NimBLE and mid-size allocations in PSRAM, FreeRTOS functions in flash to make IRAM room for the camera's interrupt code (each measured, see the comments in the target's `sdkconfig.default_minirover.esp32`);
 - based on `ESP32_PSRAM_REV0`, so it runs on every ESP32 chip revision a kit might have.
+
+### Changing an interop assembly
+
+`MiniRover.Native` (and `SpawnDev.nanoFramework.WebRTC`) are interop assemblies: the firmware holds a native method table with a checksum that must match the managed assembly. After adding, removing or changing any `extern` method, build the nfproj, then copy **all** generated table files from its `Stubs/` folder (`*_Native.cpp`, `*_Native.h`, every `*_mshl.cpp` and class `.h`) into the native folder, implement the new method, and rebuild the firmware. A firmware and an app built from different checksums refuse to run together. Every method gets a table entry, so adding even a plain managed method changes the checksum (measured); constants do not.
 
 ## Get the sources
 

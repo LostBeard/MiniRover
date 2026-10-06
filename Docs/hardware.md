@@ -75,7 +75,14 @@ The divider is about 1/4, so a full 8.4 V pack reads about 2.1 V at the pin. The
 | VSYNC / HREF / PCLK | 25 / 23 / 22 |
 | PWDN / RESET | not connected |
 
-Freenove ships two camera types, **OV2640** or **GC0308**, and the board cannot tell you which you have until the firmware reads the sensor ID over SCCB. MiniRover detects it at boot and shows it on the status page. Both deliver JPEG frames.
+Freenove ships two camera types, **OV2640** or **GC0308**, and the board cannot tell you which you have until the firmware reads the sensor ID over SCCB. MiniRover detects it at boot and reports it (`/status` -> `camera.sensor`: `38` = 0x26 OV2640, `155` = 0x9B GC0308).
+
+- **OV2640** encodes JPEG itself. Measured on the first car: 320x240 at quality 12 is about 6 KB per frame and streams at 14.6 fps to a browser.
+- **GC0308** has **no JPEG encoder**: it outputs YUV, and the firmware JPEG-encodes each frame in software (esp32-camera's `frame2jpg`), which costs CPU and lowers the frame rate. Its largest size is 640x480. Not yet measured on a real GC0308.
+
+**Orientation:** the camera head holds the sensor upside down. MiniRover's default is a 180-degree rotation (`camera.flip=1`, `camera.mirror=1`), verified on an OV2640 by panning: with the camera turned left (pan above 90), the scene moves right in the picture, as it should for an unmirrored image. If your picture is mirrored or upside down, change those two settings.
+
+**Resources the camera takes** (so nothing else uses them): XCLK on LEDC low-speed timer 3 / channel 7, SCCB on I2C port 1, I2S0 for the parallel data, and about 40 KB of internal RAM for DMA buffers and its task.
 
 ## Power
 

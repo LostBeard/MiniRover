@@ -73,15 +73,22 @@ static class LinkCommand
         int telemetryCount = 0;
         CarLink.Telemetry? last = null;
         bool print = false;
+        long lastTelemetryMs = -1, maxTelemetryGapMs = 0;
         link.OnTelemetry += t =>
         {
+            long nowMs = sw.ElapsedMilliseconds;
+            if (lastTelemetryMs >= 0) maxTelemetryGapMs = Math.Max(maxTelemetryGapMs, nowMs - lastTelemetryMs);
+            lastTelemetryMs = nowMs;
             telemetryCount++;
             last = t;
             if (print) Console.WriteLine($"  telemetry #{t.Seq}: {t.BatteryMillivolts / 1000.0:F2} V level {t.BatteryLevel} moving={t.Moving} " +
                                          $"light={t.Light} line={t.Line} pan={t.PanTenths / 10.0} tilt={t.TiltTenths / 10.0} heap={t.FreeHeapKb} KB wifi={t.Rssi} dBm");
         };
         int videoFrames = 0;
-        link.OnVideoChannel += ch => ch.OnBinaryMessage += _ => videoFrames++;
+        long videoBytes = 0;
+        byte[]? lastFrame = null;
+        link.OnVideoChannel += ch => ch.OnBinaryMessage += f => { videoFrames++; videoBytes += f.Length; lastFrame = f; };
+        link.OnText += t => Console.WriteLine("  car says: " + t);
 
         Console.WriteLine($"connecting to '{carName ?? "car"}' via {tracker ?? CarLink.DefaultTrackerUrl} (switch the car on if it is off)");
         using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120)))
@@ -137,6 +144,53 @@ static class LinkCommand
                         : $"  FAIL: {(sawMoving ? "never stopped" : "never seen moving")}");
                     break;
                 }
+                case "video":
+                {
+                    // video <ms> [size] [quality] [fps]: stream, count frames, save the last one as a JPEG to check it decodes.
+                    int ms = int.Parse(p[1]);
+                    int size = p.Length > 2 ? int.Parse(p[2]) : 0, q = p.Length > 3 ? int.Parse(p[3]) : 0, fps = p.Length > 4 ? int.Parse(p[4]) : 0;
+                    maxTelemetryGapMs = 0;
+                    int t0 = telemetryCount;
+                    int f0 = videoFrames;
+                    long b0 = videoBytes;
+                    link.Video(true, size, q, fps);
+                    var vw = Stopwatch.StartNew();
+                    await Task.Delay(ms);
+                    link.Video(false);
+                    int n = videoFrames - f0;
+                    Console.WriteLine($"  {n} frames in {vw.ElapsedMilliseconds} ms = {n * 1000.0 / vw.ElapsedMilliseconds:F1} fps, avg {(n > 0 ? (videoBytes - b0) / n : 0)} bytes, car reports {last?.VideoFps} fps");
+                    Console.WriteLine($"  telemetry during video: {telemetryCount - t0} messages, longest gap {maxTelemetryGapMs} ms");
+                    if (lastFrame != null)
+                    {
+                        bool jpeg = lastFrame.Length > 4 && lastFrame[0] == 0xFF && lastFrame[1] == 0xD8 && lastFrame[^2] == 0xFF && lastFrame[^1] == 0xD9;
+                        string file = Path.Combine(Path.GetTempPath(), "minirover-frame.jpg");
+                        File.WriteAllBytes(file, lastFrame);
+                        Console.WriteLine($"  last frame {lastFrame.Length} bytes, JPEG start/end markers {(jpeg ? "OK" : "MISSING")}, saved {file}");
+                    }
+                    break;
+                }
+                case "set": link.Setting(p[1]); break;
+                case "load":
+                {
+                    // load <ms> <left%> <right%>: drive commands at 20 Hz (like the browser) while counting telemetry.
+                    int ms = int.Parse(p[1]), l = int.Parse(p[2]), r = int.Parse(p[3]);
+                    int t0 = telemetryCount;
+                    maxTelemetryGapMs = 0;
+                    lastTelemetryMs = sw.ElapsedMilliseconds;
+                    var lw = Stopwatch.StartNew();
+                    int moving = 0;
+                    while (lw.ElapsedMilliseconds < ms)
+                    {
+                        link.Drive(l, r, 300);
+                        if (last?.Moving == true) moving++;
+                        await Task.Delay(50);
+                    }
+                    link.Stop();
+                    Console.WriteLine($"  {telemetryCount - t0} telemetry in {ms} ms while driving at 20 Hz, longest gap {maxTelemetryGapMs} ms, 'moving' seen in {moving} of {ms / 50} samples");
+                    break;
+                }
+                case "videoon": link.Video(true); break;
+                case "videooff": link.Video(false); break;
                 case "stop": link.Stop(); break;
                 case "servo": link.Servo(double.Parse(p[1]), double.Parse(p[2])); break;
                 case "leds": link.Leds(byte.Parse(p[1]), byte.Parse(p[2]), byte.Parse(p[3])); break;

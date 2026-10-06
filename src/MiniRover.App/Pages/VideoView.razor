@@ -1,0 +1,120 @@
+@implements IDisposable
+@using SpawnDev.RTC
+@using SpawnDev.SpawnJS.JSObjects
+@using SpawnDev.SpawnJS.RazorRenderer
+@inject SpawnJSRuntime JS
+@inject SpawnDomRenderer Renderer
+
+@* Live camera frames. Each JPEG arrives as a JavaScript ArrayBuffer and is decoded by the browser
+   (createImageBitmap) straight onto the canvas: the bytes never cross into .NET memory. When decoding falls
+   behind, only the newest frame is kept, so the picture never lags behind the car. *@
+<div class="mr-video" data-test="drive-video" data-frames="@_decoded" data-fps="@_fps">
+    <canvas @ref="_canvasRef" class="mr-video-canvas"></canvas>
+    @if (_decoded == 0)
+    {
+        <span class="mr-video-note mr-muted">@(Channel == null ? "Waiting for video..." : "Starting the camera...")</span>
+    }
+</div>
+
+@code {
+    [Parameter] public IRTCDataChannel? Channel { get; set; }
+
+    ElementReference _canvasRef;
+    HTMLCanvasElement? _canvas;
+    CanvasRenderingContext2D? _ctx;
+    Window? _window;
+    IRTCDataChannel? _subscribed;
+    ArrayBuffer? _pending;   // newest frame not yet decoded
+    bool _decoding;
+    int _decoded, _fps, _windowFrames, _width, _height;
+    readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+    bool _disposed;
+
+    protected override void OnParametersSet()
+    {
+        if (Channel == _subscribed) return;
+        if (_subscribed != null) _subscribed.OnArrayBufferMessage -= OnFrame;
+        _subscribed = Channel;
+        if (_subscribed != null) _subscribed.OnArrayBufferMessage += OnFrame;
+    }
+
+    void OnFrame(ArrayBuffer frame)
+    {
+        if (_disposed) { frame.Dispose(); return; }
+        // Latest wins: a frame still waiting is replaced by the newer one.
+        _pending?.Dispose();
+        _pending = frame;
+        if (!_decoding) _ = DecodeLoop();
+    }
+
+    async Task DecodeLoop()
+    {
+        _decoding = true;
+        try
+        {
+            while (_pending != null && !_disposed)
+            {
+                using ArrayBuffer frame = _pending;
+                _pending = null;
+                if (!EnsureCanvas()) return;
+                using var blob = new Blob(new[] { frame }, new BlobOptions { Type = "image/jpeg" });
+                ImageBitmap bitmap;
+                try { bitmap = await _window!.CreateImageBitmap(blob); }
+                catch { continue; } // a damaged frame: skip it, the next one is a few tens of ms away
+                using (bitmap)
+                {
+                    int w = (int)bitmap.Width, h = (int)bitmap.Height;
+                    if (w != _width || h != _height)
+                    {
+                        // The car can change resolution mid-stream; resize the canvas only then (setting it clears it).
+                        _canvas!.Width = _width = w;
+                        _canvas.Height = _height = h;
+                    }
+                    _ctx!.DrawImage(bitmap, 0, 0);
+                    bitmap.Close();
+                }
+                _decoded++;
+                _windowFrames++;
+                if (_clock.ElapsedMilliseconds >= 1000)
+                {
+                    _fps = (int)Math.Round(_windowFrames * 1000.0 / _clock.ElapsedMilliseconds);
+                    _windowFrames = 0;
+                    _clock.Restart();
+                    StateHasChanged();
+                }
+                else if (_decoded == 1)
+                {
+                    StateHasChanged(); // hide the "starting" note
+                }
+            }
+        }
+        finally
+        {
+            _decoding = false;
+        }
+    }
+
+    bool EnsureCanvas()
+    {
+        if (_ctx != null) return true;
+        _canvas = Renderer.GetElement<HTMLCanvasElement>(_canvasRef);
+        if (_canvas == null) return false;
+        _ctx = _canvas.Get2DContext();
+        _window = JS.Get<Window>("window");
+        return true;
+    }
+
+    /// <summary>Frames decoded in the last full second.</summary>
+    public int Fps => _fps;
+
+    public void Dispose()
+    {
+        _disposed = true;
+        if (_subscribed != null) _subscribed.OnArrayBufferMessage -= OnFrame;
+        _pending?.Dispose();
+        _pending = null;
+        _ctx?.Dispose();
+        _canvas?.Dispose();
+        _window?.Dispose();
+    }
+}

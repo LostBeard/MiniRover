@@ -33,6 +33,9 @@ namespace MiniRover.Car
                 if (car.Buzzer != null) car.Buzzer.Play(new int[] { 1568, 70, 0, 30, 2093, 90 });
             });
 
+            // Camera before WiFi/BLE: its DMA buffers need contiguous internal RAM, which only gets scarcer later.
+            Step(car, "camera", car.InitCamera);
+
             var wifi = new WifiService(settings);
             Step(car, "wifi", () =>
             {
@@ -105,6 +108,19 @@ namespace MiniRover.Car
             }
         }
 
+        /// <summary>Native heaps, KB: internal free / largest block, PSRAM free / largest block.</summary>
+        public static string MemoryText()
+        {
+            try
+            {
+                return "internal " + (MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.MemInternalFree) / 1024) + " KB (block "
+                    + (MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.MemInternalLargest) / 1024) + "), PSRAM "
+                    + (MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.MemPsramFree) / 1024) + " KB (block "
+                    + (MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.MemPsramLargest) / 1024) + ")";
+            }
+            catch (Exception ex) { return ex.Message; }
+        }
+
         delegate void StepAction();
 
         static void Step(Car car, string name, StepAction action)
@@ -112,6 +128,7 @@ namespace MiniRover.Car
             try
             {
                 action();
+                System.Diagnostics.Debug.WriteLine("Memory after " + name + ": " + MemoryText());
             }
             catch (Exception ex)
             {

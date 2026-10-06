@@ -9,6 +9,7 @@
 #include "MiniRover_Native_MiniRover_Native_Board.h"
 
 #include "esp_wifi.h"
+#include "esp_heap_caps.h"
 
 using namespace MiniRover_Native::MiniRover_Native;
 
@@ -30,4 +31,19 @@ bool Board::SetWifiPowerSave(bool param0, HRESULT &hr)
     // ESP-IDF refuses WIFI_PS_NONE while Bluetooth is enabled (WiFi/BT coexistence needs modem sleep), so this returns
     // false during the car's BLE setup window and the caller retries after it.
     return esp_wifi_set_ps(param0 ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE) == ESP_OK;
+}
+
+signed int Board::FreeMemory(signed int param0, HRESULT &hr)
+{
+    (void)hr;
+    switch (param0)
+    {
+        case 0: return (signed int)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        case 1: return (signed int)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        case 2: return (signed int)heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+        case 3: return (signed int)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
+        case 4: return (signed int)heap_caps_get_free_size(MALLOC_CAP_DMA);
+        case 5: return (signed int)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    return -1;
 }

@@ -7,6 +7,16 @@ using MiniRover.ConsoleApp;
 // minirover link [--car name] [--key hex] ["drive 40 40 1000; servo 90 120; ..."]   (see LinkCommand.cs)
 if (args.Length >= 1 && args[0] == "link") return await LinkCommand.RunAsync(args);
 
+// minirover monitor <COMx> [seconds]   print the car's debug output (Debug.WriteLine, exceptions)
+if (args.Length >= 2 && args[0] == "monitor")
+{
+    using var mon = NfDebugListener.Attach(args[1]);
+    var clock = System.Diagnostics.Stopwatch.StartNew();
+    mon.Line += line => Console.WriteLine($"[{clock.Elapsed.TotalSeconds,7:F1}] {line}");
+    await Task.Delay(TimeSpan.FromSeconds(args.Length > 2 ? int.Parse(args[2]) : 60));
+    return 0;
+}
+
 // minirover drivetest <publish wwwroot> [httpPort] [cdpPort] [screenshotDir]   (THE WHEELS MUST BE OFF THE GROUND)
 if (args.Length >= 2 && args[0] == "drivetest")
 {
