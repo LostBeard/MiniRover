@@ -233,14 +233,14 @@ namespace MiniRover.Car
                 WifiAvailableNetwork[] networks;
                 try
                 {
-                    DateTime started = DateTime.UtcNow;
+                    long started = Environment.TickCount64;
                     adapter.ScanAsync();
                     // A passive scan is 500 ms per channel, and in AP+STA mode the radio keeps returning to the setup
                     // AP's channel between scan channels, so allow well over the 7 s a 14-channel STA scan takes.
                     bool fired = done.WaitOne(25_000, false);
                     networks = adapter.NetworkReport.AvailableNetworks;
                     System.Diagnostics.Debug.WriteLine("BLE setup scan: event " + (fired ? "fired" : "did NOT fire") + " after " +
-                        ((int)(DateTime.UtcNow - started).TotalMilliseconds).ToString() + " ms, " + networks.Length.ToString() + " networks in report");
+                        (Environment.TickCount64 - started).ToString() + " ms, " + networks.Length.ToString() + " networks in report");
                     if (!fired && networks.Length == 0)
                     {
                         SendError("scan timed out");
@@ -422,7 +422,7 @@ namespace MiniRover.Car
                 catch (Exception ex) { sb.Append("line=err ").Append(ex.Message).Append('\n'); }
             }
             if (_car.Drive != null) sb.Append("moving=").Append(_car.Drive.Moving ? "1" : "0").Append('\n');
-            if (_car.LastIrTime != DateTime.MinValue) sb.Append("ir=0x").Append(_car.LastIrCode.ToString("X8")).Append('\n');
+            if (_car.LastIrMs != 0) sb.Append("ir=0x").Append(_car.LastIrCode.ToString("X8")).Append('\n');
             return sb.ToString();
         }
 

@@ -20,7 +20,9 @@ namespace MiniRover.Car
         readonly Motors _motors;
         readonly Settings _settings;
         readonly object _lock = new object();
-        long _deadlineTicks;
+        // Monotonic milliseconds (Environment.TickCount64), never the wall clock: a time sync that steps the clock
+        // BACKWARD would push a wall-clock deadline into the future and keep the motors running.
+        long _deadlineMs;
         Thread _watchdog;
 
         /// <summary>Set by the battery service. Critical = refuse to drive; Low = halve the speed limit.</summary>
@@ -58,7 +60,7 @@ namespace MiniRover.Car
             lock (_lock)
             {
                 _motors.SetSides(Clamp(left) * limit, Clamp(right) * limit);
-                _deadlineTicks = DateTime.UtcNow.Ticks + holdMs * TimeSpan.TicksPerMillisecond;
+                _deadlineMs = Environment.TickCount64 + holdMs;
             }
         }
 
@@ -77,7 +79,7 @@ namespace MiniRover.Car
             lock (_lock)
             {
                 _motors.Set(motor, Clamp(speed) * limit);
-                _deadlineTicks = DateTime.UtcNow.Ticks + holdMs * TimeSpan.TicksPerMillisecond;
+                _deadlineMs = Environment.TickCount64 + holdMs;
             }
         }
 
@@ -86,7 +88,7 @@ namespace MiniRover.Car
             lock (_lock)
             {
                 _motors.StopAll();
-                _deadlineTicks = 0;
+                _deadlineMs = 0;
             }
         }
 
@@ -107,14 +109,14 @@ namespace MiniRover.Car
                 Thread.Sleep(20);
                 lock (_lock)
                 {
-                    if (_deadlineTicks != 0 && DateTime.UtcNow.Ticks > _deadlineTicks)
+                    if (_deadlineMs != 0 && Environment.TickCount64 > _deadlineMs)
                     {
                         if (_motors.AnyRunning)
                         {
                             DeadmanStops++;
                         }
                         _motors.StopAll();
-                        _deadlineTicks = 0;
+                        _deadlineMs = 0;
                     }
                 }
             }

@@ -15,12 +15,13 @@ namespace MiniRover.Car
     {
         readonly Car _car;
         readonly WifiService _wifi;
-        readonly DateTime _boot = DateTime.UtcNow;
+        readonly HttpServer _http;
 
-        public WebApi(Car car, WifiService wifi)
+        public WebApi(Car car, WifiService wifi, HttpServer http)
         {
             _car = car;
             _wifi = wifi;
+            _http = http;
         }
 
         public void Handle(HttpRequest r, Socket c)
@@ -175,10 +176,13 @@ namespace MiniRover.Car
         string StatusJson()
         {
             var sb = new StringBuilder();
-            sb.Append("{\"uptimeS\":").Append(((int)(DateTime.UtcNow - _boot).TotalSeconds).ToString());
+            // Monotonic: the wall clock jumps when WiFi syncs the time (wall-clock uptime read ~56 years on the car).
+            sb.Append("{\"uptimeS\":").Append((Environment.TickCount64 / 1000).ToString());
             sb.Append(",\"ip\":\"").Append(_wifi.IpAddress).Append('"');
             sb.Append(",\"managedBytesInUse\":").Append(System.GC.GetTotalMemory(false).ToString());
-            sb.Append(",\"faults\":\"").Append(JsonEscape(_car.Faults)).Append('"');
+            string faults = _car.Faults;
+            if (_http.StartError.Length > 0) faults += (faults.Length > 0 ? "; " : "") + _http.StartError;
+            sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
 
             BatteryService b = _car.Battery;
             if (b != null)
@@ -202,10 +206,10 @@ namespace MiniRover.Car
                 sb.Append(",\"moving\":").Append(B(_car.Drive.Moving))
                   .Append(",\"deadmanStops\":").Append(_car.Drive.DeadmanStops.ToString());
             }
-            if (_car.LastIrTime != DateTime.MinValue)
+            if (_car.LastIrMs != 0)
             {
                 sb.Append(",\"ir\":{\"code\":\"0x").Append(_car.LastIrCode.ToString("X8"))
-                  .Append("\",\"ageS\":").Append(((int)(DateTime.UtcNow - _car.LastIrTime).TotalSeconds).ToString()).Append('}');
+                  .Append("\",\"ageS\":").Append(((Environment.TickCount64 - _car.LastIrMs) / 1000).ToString()).Append('}');
             }
             Settings s = _car.Settings;
             sb.Append(",\"settings\":{\"pan.trim\":").Append(s.PanTrim.ToString("F1"))

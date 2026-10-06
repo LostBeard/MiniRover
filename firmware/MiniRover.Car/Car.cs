@@ -30,7 +30,8 @@ namespace MiniRover.Car
         /// <summary>A battery pack was detected at boot (false = USB power only).</summary>
         public bool HasBattery;
         public uint LastIrCode;
-        public DateTime LastIrTime = DateTime.MinValue;
+        /// <summary>Environment.TickCount64 when the last IR code arrived; 0 = none yet.</summary>
+        public long LastIrMs;
 
         public Car(Settings settings)
         {
@@ -87,7 +88,7 @@ namespace MiniRover.Car
                 Ir.CodeReceived += code =>
                 {
                     LastIrCode = code;
-                    LastIrTime = DateTime.UtcNow;
+                    LastIrMs = Environment.TickCount64;
                     System.Diagnostics.Debug.WriteLine("IR: 0x" + code.ToString("X8"));
                 };
             });

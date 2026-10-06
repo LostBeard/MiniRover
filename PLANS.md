@@ -93,7 +93,8 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [ ] Shared protocol (drive intent, servo, lights, matrix, buzzer, modes, settings, telemetry, camera control)
 - [ ] Tracker signaling on the car, pairing link, Ed25519 challenge
 - [ ] First-boot access point + setup page (WiFi credentials, room key, pairing link)
-- [ ] Deadman stop, measured
+- [x] Deadman stop, measured on the real car over WiFi: 300 ms hold -> stopped within 345 ms of sending (incl. ~100 ms network), 1000 ms hold -> within 1036 ms; every stop counted by the watchdog
+- [ ] Disable WiFi power save (modem sleep) for driving: a status poll stalled 1.4 s on the car (measured), unacceptable for 30 Hz control
 - [ ] `MiniRover.Console` drives the real car; hardware-in-the-loop tests
 
 ### Phase 4 - Browser app

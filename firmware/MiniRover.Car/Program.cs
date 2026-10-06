@@ -19,18 +19,26 @@ namespace MiniRover.Car
                 System.Diagnostics.Debug.WriteLine("Faults: " + car.Faults);
             }
 
-            if (car.Matrix != null) car.Matrix.Show(car.HasBattery ? Eyes.Open : Eyes.Closed);
-            if (car.Leds != null && car.HasBattery)
+            // Every startup step is guarded: an exception escaping Main kills this thread (the HTTP bind did, on the
+            // real car) and leaves a half-started car. A failed step becomes a reported fault instead.
+            Step(car, "greeting", () =>
             {
-                // Dim white headlights so a powered car is obvious. Not on USB power alone (brownout).
-                car.Leds.Fill(40, 40, 40);
-                car.Leds.Show();
-            }
-            if (car.Buzzer != null) car.Buzzer.Play(new int[] { 1568, 70, 0, 30, 2093, 90 });
+                if (car.Matrix != null) car.Matrix.Show(car.HasBattery ? Eyes.Open : Eyes.Closed);
+                if (car.Leds != null && car.HasBattery)
+                {
+                    // Dim white headlights so a powered car is obvious. Not on USB power alone (brownout).
+                    car.Leds.Fill(40, 40, 40);
+                    car.Leds.Show();
+                }
+                if (car.Buzzer != null) car.Buzzer.Play(new int[] { 1568, 70, 0, 30, 2093, 90 });
+            });
 
             var wifi = new WifiService(settings);
-            wifi.Start();
-            if (wifi.InSetupMode && car.Matrix != null) car.Matrix.Show(Eyes.Setup);
+            Step(car, "wifi", () =>
+            {
+                wifi.Start();
+                if (wifi.InSetupMode && car.Matrix != null) car.Matrix.Show(Eyes.Setup);
+            });
 
             // BLE setup: always in setup mode; after a BLE-provisioned reboot, for a short window so the app can
             // reconnect and confirm the car joined the network. Never while driving.
@@ -38,30 +46,27 @@ namespace MiniRover.Car
             bool announce = !wifi.InSetupMode && settings.AnnounceAfterSetup;
             if (wifi.InSetupMode || announce)
             {
-                try
-                {
-                    ble.Start();
-                }
-                catch (Exception ex)
-                {
-                    car.Faults += (car.Faults.Length > 0 ? "; " : "") + "ble: " + ex.Message;
-                    System.Diagnostics.Debug.WriteLine("BLE start FAILED: " + ex.Message);
-                }
+                Step(car, "ble", ble.Start);
             }
             if (announce)
             {
-                settings.AnnounceAfterSetup = false;
-                settings.Save();
-                new Thread(() =>
+                Step(car, "ble window", () =>
                 {
-                    Thread.Sleep(Protocol.BleSetup.ConnectedAdvertiseSeconds * 1000);
-                    ble.Stop();
-                    System.Diagnostics.Debug.WriteLine("BLE setup window closed");
-                }).Start();
+                    settings.AnnounceAfterSetup = false;
+                    settings.Save();
+                    new Thread(() =>
+                    {
+                        Thread.Sleep(Protocol.BleSetup.ConnectedAdvertiseSeconds * 1000);
+                        ble.Stop();
+                        System.Diagnostics.Debug.WriteLine("BLE setup window closed");
+                    }).Start();
+                });
             }
 
-            var api = new WebApi(car, wifi);
-            new HttpServer(80, api.Handle).Start();
+            var http = new HttpServer(80, null);
+            var api = new WebApi(car, wifi, http);
+            http.Handle = api.Handle;
+            http.Start();
 
             // Show critical battery on the eyes; everything else runs on its own threads.
             BatteryLevel shown = BatteryLevel.Ok;
@@ -74,6 +79,21 @@ namespace MiniRover.Car
                     try { car.Matrix.Show(shown == BatteryLevel.Critical ? Eyes.Dead : Eyes.Open); }
                     catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Matrix: " + ex.Message); }
                 }
+            }
+        }
+
+        delegate void StepAction();
+
+        static void Step(Car car, string name, StepAction action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                car.Faults += (car.Faults.Length > 0 ? "; " : "") + name + ": " + ex.Message;
+                System.Diagnostics.Debug.WriteLine("Startup step '" + name + "' FAILED: " + ex.Message);
             }
         }
     }

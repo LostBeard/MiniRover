@@ -19,7 +19,7 @@ namespace MiniRover.Car.Drivers
         readonly GpioController _gpio;
         readonly GpioPin _trigger;
         readonly ReceiverChannel _echo;
-        DateTime _last = DateTime.MinValue;
+        long _lastMs = -1000; // Environment.TickCount64 of the last trigger (monotonic)
 
         public Sonar(GpioController gpio)
         {
@@ -46,12 +46,12 @@ namespace MiniRover.Car.Drivers
             centimeters = 0;
 
             // The datasheet asks for >= 60 ms between measurements so stray echoes die out.
-            TimeSpan since = DateTime.UtcNow - _last;
-            if (since.TotalMilliseconds < 60)
+            long since = Environment.TickCount64 - _lastMs;
+            if (since < 60)
             {
-                Thread.Sleep(60 - (int)since.TotalMilliseconds);
+                Thread.Sleep((int)(60 - since));
             }
-            _last = DateTime.UtcNow;
+            _lastMs = Environment.TickCount64;
 
             _echo.Start();
             // Two managed GPIO writes take well over the 10 us minimum trigger pulse.

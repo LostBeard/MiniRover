@@ -42,22 +42,51 @@ namespace MiniRover.Car
         public delegate void Handler(HttpRequest request, Socket client);
 
         readonly int _port;
-        readonly Handler _handler;
+        /// <summary>Request handler; set before Start.</summary>
+        public Handler Handle;
         Socket _listener;
         Thread _thread;
 
         public HttpServer(int port, Handler handler)
         {
             _port = port;
-            _handler = handler;
+            Handle = handler;
         }
 
+        /// <summary>Set if the server could not start; shown in the status faults.</summary>
+        public string StartError { get; private set; } = "";
+
+        /// <summary>
+        /// Starts listening on a background thread. Binding can fail for a while after a CLR-only restart (a deploy):
+        /// the previous run's listening socket on the same port is still held by the network stack, and Bind threw
+        /// SocketException on the real car. So: ReuseAddress, retry, and never take the caller down with it.
+        /// </summary>
         public void Start()
         {
-            _listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            _listener.Bind(new IPEndPoint(IPAddress.Any, _port));
-            _listener.Listen(2);
-            _thread = new Thread(AcceptLoop);
+            _thread = new Thread(() =>
+            {
+                for (int attempt = 1; ; attempt++)
+                {
+                    try
+                    {
+                        _listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                        _listener.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                        _listener.Bind(new IPEndPoint(IPAddress.Any, _port));
+                        _listener.Listen(2);
+                        StartError = "";
+                        if (attempt > 1) System.Diagnostics.Debug.WriteLine("HTTP: listening on port " + _port + " after " + attempt + " attempts");
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        try { _listener?.Close(); } catch { }
+                        StartError = "http port " + _port + ": " + ex.Message;
+                        System.Diagnostics.Debug.WriteLine("HTTP: bind attempt " + attempt + " failed: " + ex.Message);
+                        Thread.Sleep(attempt < 10 ? 1000 : 10000);
+                    }
+                }
+                AcceptLoop();
+            });
             _thread.Start();
         }
 
@@ -73,7 +102,7 @@ namespace MiniRover.Car
                     HttpRequest req = Parse(client);
                     if (req != null)
                     {
-                        _handler(req, client);
+                        Handle(req, client);
                     }
                 }
                 catch (Exception ex)
