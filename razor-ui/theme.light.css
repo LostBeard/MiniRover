@@ -1,0 +1,14 @@
+/* RazorUI light theme. Targets :host,:root so it applies whether adopted/linked into a shadow root
+   (:host = the shadow host) or the document (:root). :root ALONE would not match inside a shadow root. */
+:host, :root {
+  --ui-accent: #4f46e5;
+  --ui-on-accent: #ffffff;
+  --ui-surface: #ffffff;
+  --ui-text: #1a1a1f;
+  --ui-muted: #6b7280;
+  --ui-border: #e2e2ea;
+  --ui-radius: 10px;
+  --ui-shadow: 0 1px 3px rgba(0,0,0,.10);
+  --ui-hover: rgba(0,0,0,.06);
+  --ui-hover-strong: rgba(0,0,0,.12);
+}

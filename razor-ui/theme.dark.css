@@ -1,0 +1,13 @@
+/* RazorUI dark theme. See theme.light.css for the :host,:root rationale. */
+:host, :root {
+  --ui-accent: #7c6cff;
+  --ui-on-accent: #ffffff;
+  --ui-surface: #1b1b22;
+  --ui-text: #f0f0f5;
+  --ui-muted: #9aa0ab;
+  --ui-border: #33333f;
+  --ui-radius: 10px;
+  --ui-shadow: 0 1px 3px rgba(0,0,0,.5);
+  --ui-hover: rgba(255,255,255,.10);
+  --ui-hover-strong: rgba(255,255,255,.18);
+}

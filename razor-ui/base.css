@@ -1,0 +1,222 @@
+/* RazorUI component styles. Authored against theme CSS custom properties (var(--ui-*)); every value
+   falls back to a sensible default so components are usable even with no theme loaded. Loaded via code
+   (SpawnDomRenderer.AttachStyleSheet) into each shadow root - never linked from the host page. */
+
+:host {
+    all: initial;
+    display: block;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1.2;
+    color: var(--ui-text, #1a1a1f);
+}
+
+.ui-button {
+  font: inherit;
+  line-height: 1.2;
+  padding: 0.5em 0.9em;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius, 8px);
+  background: var(--ui-accent, #4f46e5);
+  color: var(--ui-on-accent, #fff);
+  cursor: pointer;
+  transition: filter .15s ease, background .15s ease;
+}
+.ui-button:hover { filter: brightness(1.08); }
+.ui-button:active { filter: brightness(0.93); }
+.ui-button.ui-secondary {
+  background: var(--ui-surface, #fff);
+  color: var(--ui-text, #1a1a1f);
+  border-color: var(--ui-border, #d0d0d8);
+}
+
+.ui-card {
+  display: block;
+  background: var(--ui-surface, #fff);
+  color: var(--ui-text, #1a1a1f);
+  border: 1px solid var(--ui-border, #e2e2ea);
+  border-radius: var(--ui-radius, 12px);
+  box-shadow: var(--ui-shadow, 0 1px 3px rgba(0,0,0,.1));
+  padding: 1em;
+}
+.ui-card-title { margin: 0 0 .5em; font-weight: 600; }
+.ui-card-body { color: var(--ui-text, #1a1a1f); }
+
+.ui-input {
+  font: inherit;
+  padding: .45em .6em;
+  border: 1px solid var(--ui-border, #d0d0d8);
+  border-radius: var(--ui-radius, 8px);
+  background: var(--ui-surface, #fff);
+  color: var(--ui-text, #1a1a1f);
+}
+.ui-input:focus { outline: 2px solid var(--ui-accent, #4f46e5); outline-offset: 1px; }
+
+.ui-stack { display: flex; flex-direction: column; }
+.ui-stack.ui-stack-h { flex-direction: row; align-items: center; }
+
+.ui-dialog-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1000; }
+.ui-dialog {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  z-index: 1001; min-width: 280px; max-width: 90vw;
+  background: var(--ui-surface, #fff); color: var(--ui-text, #1a1a1f);
+  border: 1px solid var(--ui-border, #e2e2ea); border-radius: var(--ui-radius, 12px);
+  box-shadow: 0 10px 40px rgba(0,0,0,.3); padding: 1.25em;
+}
+.ui-dialog-title { margin: 0 0 .5em; font-weight: 600; font-size: 1.1em; }
+
+/* ── Progress (linear) ─────────────────────────────────────────────────────── */
+.ui-progress { display: flex; align-items: center; gap: .6em; width: 100%; }
+.ui-progress-track {
+  position: relative; flex: 1 1 auto; height: .5em; overflow: hidden;
+  background: var(--ui-progress-track, var(--ui-border, #e2e2ea));
+  border-radius: 999px;
+}
+.ui-progress-fill {
+  height: 100%; width: 0; border-radius: inherit;
+  background: var(--ui-accent, #4f46e5);
+  transition: width .3s ease;
+}
+.ui-progress-label {
+  font: inherit; font-size: .85em; color: var(--ui-muted, #6b7280);
+  min-width: 2.75em; text-align: right; font-variant-numeric: tabular-nums;
+}
+/* striped fill (works determinate; animates when combined with indeterminate) */
+.ui-progress-striped .ui-progress-fill {
+  background-image: linear-gradient(45deg,
+    rgba(255,255,255,.25) 25%, transparent 25%, transparent 50%,
+    rgba(255,255,255,.25) 50%, rgba(255,255,255,.25) 75%, transparent 75%, transparent);
+  background-size: .75em .75em;
+}
+/* indeterminate: a sweeping segment */
+.ui-progress-indeterminate .ui-progress-fill {
+  width: 35%; transition: none;
+  animation: ui-progress-sweep 1.15s ease-in-out infinite;
+}
+@keyframes ui-progress-sweep {
+  0%   { margin-left: -35%; }
+  100% { margin-left: 100%; }
+}
+
+/* ── Progress (circular / donut) ──────────────────────────────────────────── */
+.ui-progress-circle { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+.ui-progress-circle-svg { display: block; }
+.ui-progress-circle-track { stroke: var(--ui-progress-track, var(--ui-border, #e2e2ea)); }
+.ui-progress-circle-fill {
+  stroke: var(--ui-accent, #4f46e5);
+  transition: stroke-dashoffset .3s ease;
+}
+.ui-progress-circle-label {
+  position: absolute; font: inherit; font-size: .8em; font-weight: 600;
+  color: var(--ui-text, #1a1a1f); font-variant-numeric: tabular-nums;
+}
+.ui-progress-circle-indeterminate .ui-progress-circle-svg {
+  animation: ui-progress-spin 1s linear infinite; transform-origin: 50% 50%;
+}
+.ui-progress-circle-indeterminate .ui-progress-circle-fill { transition: none; }
+@keyframes ui-progress-spin { to { transform: rotate(360deg); } }
+
+/* ── Slider (range) ───────────────────────────────────────────────────────── */
+.ui-slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 1.25em; margin: 0; padding: 0;
+  background: transparent; cursor: pointer;
+}
+.ui-slider:focus { outline: none; }
+/* WebKit/Blink: filled track via a gradient stopped at --ui-slider-fill */
+.ui-slider::-webkit-slider-runnable-track {
+  height: .375em; border-radius: 999px;
+  background: linear-gradient(to right,
+    var(--ui-accent, #4f46e5) 0 var(--ui-slider-fill, 0%),
+    var(--ui-progress-track, var(--ui-border, #e2e2ea)) var(--ui-slider-fill, 0%) 100%);
+}
+.ui-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 1em; height: 1em; margin-top: -0.3125em; border-radius: 50%;
+  background: var(--ui-accent, #4f46e5); border: 2px solid var(--ui-on-accent, #fff);
+  box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .1s ease;
+}
+.ui-slider:active::-webkit-slider-thumb { transform: scale(1.15); }
+.ui-slider:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--ui-accent, #4f46e5); outline-offset: 2px; }
+/* Firefox: native track + progress + thumb */
+.ui-slider::-moz-range-track {
+  height: .375em; border-radius: 999px;
+  background: var(--ui-progress-track, var(--ui-border, #e2e2ea));
+}
+.ui-slider::-moz-range-progress {
+  height: .375em; border-radius: 999px; background: var(--ui-accent, #4f46e5);
+}
+.ui-slider::-moz-range-thumb {
+  width: 1em; height: 1em; border: 2px solid var(--ui-on-accent, #fff); border-radius: 50%;
+  background: var(--ui-accent, #4f46e5); box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+
+/* ── Icon + icon button ───────────────────────────────────────────────────── */
+.ui-icon { display: block; flex: none; }
+.ui-icon-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2.25em; height: 2.25em; padding: 0; border: none; border-radius: 50%;
+  background: transparent; color: var(--ui-text, #1a1a1f); cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.ui-icon-button:hover { background: var(--ui-hover, rgba(127,127,127,.14)); }
+.ui-icon-button:active { background: var(--ui-hover-strong, rgba(127,127,127,.24)); }
+.ui-icon-button:focus-visible { outline: 2px solid var(--ui-accent, #4f46e5); outline-offset: 2px; }
+.ui-icon-button:disabled { opacity: .5; cursor: default; }
+
+/* ── Time label ───────────────────────────────────────────────────────────── */
+.ui-time {
+  font: inherit; font-variant-numeric: tabular-nums;
+  color: var(--ui-muted, #6b7280); white-space: nowrap;
+}
+
+/* ── Virtual list ─────────────────────────────────────────────────────────── */
+/* structural overflow/position are set inline by the component; base.css adds only cosmetics */
+.ui-virtual-list {
+  overscroll-behavior: contain;
+  background: var(--ui-surface, #fff); color: var(--ui-text, #1a1a1f);
+}
+.ui-virtual-list-row { box-sizing: border-box; }
+
+/* ── Tree ─────────────────────────────────────────────────────────────────── */
+.ui-tree, .ui-tree-children { list-style: none; margin: 0; padding: 0; }
+.ui-tree-row {
+  display: flex; align-items: center; gap: .25em; padding: .2em .25em;
+  border-radius: var(--ui-radius, 6px); cursor: pointer; user-select: none;
+  color: var(--ui-text, #1a1a1f);
+}
+.ui-tree-row:hover { background: var(--ui-hover, rgba(127,127,127,.14)); }
+.ui-tree-row-selected, .ui-tree-row-selected:hover {
+  background: var(--ui-accent, #4f46e5); color: var(--ui-on-accent, #fff);
+}
+.ui-tree-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.1em; height: 1.1em; flex: none; color: var(--ui-muted, #6b7280);
+  transition: transform .12s ease;
+}
+.ui-tree-toggle-open { transform: rotate(90deg); }
+.ui-tree-toggle-empty { visibility: hidden; }
+.ui-tree-row-selected .ui-tree-toggle { color: var(--ui-on-accent, #fff); }
+.ui-tree-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Data grid ────────────────────────────────────────────────────────────── */
+.ui-datagrid {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--ui-border, #e2e2ea); border-radius: var(--ui-radius, 8px);
+  overflow: hidden; background: var(--ui-surface, #fff); color: var(--ui-text, #1a1a1f);
+}
+.ui-datagrid-header {
+  display: flex; align-items: center; height: 36px; flex: none; font-weight: 600;
+  border-bottom: 1px solid var(--ui-border, #e2e2ea);
+  background: var(--ui-progress-track, rgba(127,127,127,.06));
+}
+.ui-datagrid-row {
+  display: flex; align-items: center; height: 100%;
+  border-bottom: 1px solid var(--ui-border, #e2e2ea);
+}
+.ui-datagrid-cell { padding: 0 .6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-datagrid-th { display: flex; align-items: center; gap: .25em; }
+.ui-datagrid-sortable { cursor: pointer; user-select: none; }
+.ui-datagrid-sortable:hover { background: var(--ui-hover, rgba(127,127,127,.10)); }
+.ui-datagrid-title { overflow: hidden; text-overflow: ellipsis; }
