@@ -68,6 +68,7 @@ static volatile int s_framesSent = 0;
 static volatile int s_lastBytes = 0;
 static volatile int s_errors = 0;
 static volatile int s_fpsTenths = 0;
+static volatile int s_captureUs = 0; // smoothed time esp_camera_fb_get waited for a frame (is the sensor the limit?)
 static volatile int s_encodeMs = 0;
 
 static TaskHandle_t s_task = NULL;
@@ -124,7 +125,10 @@ static void cam_task(void *arg)
             xSemaphoreGive(s_camLock); // re-initialising
             continue;
         }
+        int64_t grabStart = esp_timer_get_time();
         camera_fb_t *fb = esp_camera_fb_get();
+        int grabUs = (int)(esp_timer_get_time() - grabStart);
+        s_captureUs = s_captureUs == 0 ? grabUs : s_captureUs + (grabUs - s_captureUs) / 8;
         if (fb == NULL)
         {
             xSemaphoreGive(s_camLock);
@@ -336,6 +340,7 @@ signed int Camera::GetStat(signed int param0, HRESULT &hr)
         case 3: return s_errors;
         case 4: return s_sensor;
         case 5: return s_softJpeg ? s_encodeMs : 0;
+        case 6: return s_captureUs / 100; // ms x 10
     }
     return 0;
 }

@@ -221,7 +221,8 @@ namespace MiniRover.Car
                   .Append(",\"framesSent\":").Append(MiniRover.Native.Camera.GetStat(MiniRover.Native.Camera.StatFramesSent).ToString())
                   .Append(",\"lastFrameBytes\":").Append(MiniRover.Native.Camera.GetStat(MiniRover.Native.Camera.StatLastFrameBytes).ToString())
                   .Append(",\"captureErrors\":").Append(MiniRover.Native.Camera.GetStat(MiniRover.Native.Camera.StatCaptureErrors).ToString())
-                  .Append(",\"encodeMs\":").Append(MiniRover.Native.Camera.GetStat(MiniRover.Native.Camera.StatEncodeMs).ToString());
+                  .Append(",\"encodeMs\":").Append(MiniRover.Native.Camera.GetStat(MiniRover.Native.Camera.StatEncodeMs).ToString())
+                  .Append(",\"captureWaitMs10\":").Append(MiniRover.Native.Camera.GetStat(MiniRover.Native.Camera.StatCaptureWaitTenthsMs).ToString());
             }
             sb.Append('}');
             sb.Append(",\"managedBytesInUse\":").Append(System.GC.GetTotalMemory(false).ToString());

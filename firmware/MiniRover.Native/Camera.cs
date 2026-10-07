@@ -29,6 +29,7 @@ namespace MiniRover.Native
         public const int StatCaptureErrors = 3;
         public const int StatSensor = 4;        // sensor product id, SensorNone before Init
         public const int StatEncodeMs = 5;      // last software JPEG encode time (GC0308), 0 for hardware JPEG
+        public const int StatCaptureWaitTenthsMs = 6; // smoothed wait for the next sensor frame, ms x 10 (sensor-bound when ~1000/fps)
 
         /// <summary>
         /// Powers up the camera and detects the sensor. Returns the sensor id (SensorOV2640 / SensorGC0308 / another
