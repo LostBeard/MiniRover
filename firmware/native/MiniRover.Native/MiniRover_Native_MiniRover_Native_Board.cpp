@@ -10,6 +10,8 @@
 
 #include "esp_wifi.h"
 #include "esp_heap_caps.h"
+#include "esp_netif.h"
+#include "lwip/netif.h"
 #include "esp_system.h"
 #include "esp_sleep.h"
 #include "rtc_wdt.h"
@@ -22,12 +24,28 @@ signed int Board::WifiRssi(HRESULT &hr)
 {
     (void)hr;
     wifi_ap_record_t ap;
-    // Fails (not ESP_OK) when the station is not associated: report 0 = unknown, never a stale value.
-    if (esp_wifi_sta_get_ap_info(&ap) != ESP_OK)
+    // The signal of the WiFi link the car talks over. On a home network: the access point it joined.
+    if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK)
     {
-        return 0;
+        return ap.rssi;
     }
-    return ap.rssi;
+    // Play mode (the car is the access point): the strongest device on the car's own network. The driver's phone is
+    // normally the only one; with several, the strongest is an upper bound for the driver's link.
+    wifi_sta_list_t list = {};
+    if (esp_wifi_ap_get_sta_list(&list) == ESP_OK && list.num > 0)
+    {
+        int best = -127;
+        for (int i = 0; i < list.num; i++)
+        {
+            if (list.sta[i].rssi > best)
+            {
+                best = list.sta[i].rssi;
+            }
+        }
+        return best;
+    }
+    // Not associated and nobody on the car's network: 0 = unknown, never a stale value.
+    return 0;
 }
 
 bool Board::SetWifiPowerSave(bool param0, HRESULT &hr)
@@ -49,6 +67,39 @@ signed int Board::FreeMemory(signed int param0, HRESULT &hr)
         case 3: return (signed int)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
         case 4: return (signed int)heap_caps_get_free_size(MALLOC_CAP_DMA);
         case 5: return (signed int)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    // Network diagnostics on the same getter (new kinds are constants only: no interop checksum change).
+    // 100 stations on the car's access point, 101 / 102 the AP interface's IPv4 as esp-netif / lwIP see it (network
+    // order), 103 the AP's DHCP server state (esp_netif_dhcp_status_t), 104 the station's IPv4, 105 the WiFi mode.
+    esp_netif_t *ap = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t ip = {};
+    switch (param0)
+    {
+        case 100:
+        {
+            wifi_sta_list_t list = {};
+            return esp_wifi_ap_get_sta_list(&list) == ESP_OK ? list.num : -1;
+        }
+        case 101:
+            return (ap != NULL && esp_netif_get_ip_info(ap, &ip) == ESP_OK) ? (signed int)ip.ip.addr : -1;
+        case 102:
+        {
+            struct netif *n = ap != NULL ? netif_get_by_index((u8_t)esp_netif_get_netif_impl_index(ap)) : NULL;
+            return n != NULL ? (signed int)ip_2_ip4(&n->ip_addr)->addr : -1;
+        }
+        case 103:
+        {
+            esp_netif_dhcp_status_t st = ESP_NETIF_DHCP_INIT;
+            return (ap != NULL && esp_netif_dhcps_get_status(ap, &st) == ESP_OK) ? (signed int)st : -1;
+        }
+        case 104:
+            return (sta != NULL && esp_netif_get_ip_info(sta, &ip) == ESP_OK) ? (signed int)ip.ip.addr : -1;
+        case 105:
+        {
+            wifi_mode_t mode = WIFI_MODE_NULL;
+            return esp_wifi_get_mode(&mode) == ESP_OK ? (signed int)mode : -1;
+        }
     }
     return -1;
 }

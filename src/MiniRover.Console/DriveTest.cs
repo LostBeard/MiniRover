@@ -15,7 +15,35 @@ namespace MiniRover.ConsoleApp;
 /// </summary>
 public static class DriveTest
 {
-    public static async Task<int> RunAsync(string webRoot, int httpPort, int cdpPort, string shotDir, string? rebootPort = null, int lossPermille = 0, string? carHttp = null, bool calibrateLights = false, bool quiet = false)
+    /// <summary>Clicks something that opens Chrome's Bluetooth chooser and picks the first MiniRover in it.</summary>
+    static async Task PickCarInChooserAsync(Cdp cdp, Func<Task> click)
+    {
+        var prompt = cdp.WaitForEvent("DeviceAccess.deviceRequestPrompted");
+        await click();
+        JsonNode last = await WithTimeoutAsync(prompt, TimeSpan.FromSeconds(10), "Chrome's Bluetooth chooser");
+        string promptId = last["id"]!.GetValue<string>();
+        string? deviceId = null;
+        DateTime until = DateTime.UtcNow.AddSeconds(30);
+        while (deviceId == null && DateTime.UtcNow < until)
+        {
+            foreach (JsonNode? d in last["devices"]!.AsArray())
+            {
+                string name = d!["name"]?.GetValue<string>() ?? "";
+                if (name.StartsWith("MiniRover", StringComparison.Ordinal)) { deviceId = d["id"]!.GetValue<string>(); Console.WriteLine($"chooser offered {name}"); }
+            }
+            if (deviceId == null) last = await WithTimeoutAsync(cdp.WaitForEvent("DeviceAccess.deviceRequestPrompted"), TimeSpan.FromSeconds(30), "the car in the chooser");
+        }
+        if (deviceId == null) throw new Exception("FAIL the car never appeared in Chrome's Bluetooth chooser");
+        await cdp.SendAsync("DeviceAccess.selectPrompt", new JsonObject { ["id"] = promptId, ["deviceId"] = deviceId });
+    }
+
+    static async Task<JsonNode> WithTimeoutAsync(Task<JsonNode> task, TimeSpan timeout, string what)
+    {
+        if (await Task.WhenAny(task, Task.Delay(timeout)) != task) throw new TimeoutException("FAIL timed out waiting for " + what);
+        return await task;
+    }
+
+    public static async Task<int> RunAsync(string webRoot, int httpPort, int cdpPort, string shotDir, string? rebootPort = null, int lossPermille = 0, string? carHttp = null, bool calibrateLights = false, bool quiet = false, bool play = false)
     {
         // webRoot: a published wwwroot (served here on localhost) or the URL of a hosted copy (e.g. GitHub Pages).
         bool hosted = webRoot.StartsWith("http://") || webRoot.StartsWith("https://");
@@ -47,6 +75,7 @@ public static class DriveTest
             await using var cdp = await Cdp.ConnectAsync(cdpPort);
             await cdp.SendAsync("Runtime.enable");
             await cdp.SendAsync("Page.enable");
+            if (play) await cdp.SendAsync("DeviceAccess.enable"); // answers Chrome's Bluetooth chooser
             await cdp.SendAsync("Emulation.setTouchEmulationEnabled", new JsonObject { ["enabled"] = true, ["maxTouchPoints"] = 2 });
             var car = new JsonArray(new JsonObject { ["Name"] = name, ["RoomKeyHex"] = keyHex, ["LastIp"] = "", ["Firmware"] = "test", ["PairedUtc"] = DateTime.UtcNow.ToString("o") });
             string seed = $"if (location.origin === '{appOrigin}') localStorage.setItem('minirover.cars.v1', {JsonSerializer.Serialize(car.ToJsonString())});";
@@ -58,9 +87,25 @@ public static class DriveTest
             await WaitForAsync(cdp, "[data-test=garage-drive]", TimeSpan.FromSeconds(60), "the garage with a Drive button");
             Console.WriteLine($"PASS garage lists {name}");
             var sw = Stopwatch.StartNew();
-            await ClickAsync(cdp, "[data-test=garage-drive]");
-            await WaitForAsync(cdp, "[data-test=drive][data-state=connected]", TimeSpan.FromSeconds(95), "the drive page to connect to the car");
-            Console.WriteLine($"PASS connected over WebRTC from Chrome in {sw.ElapsedMilliseconds} ms");
+            if (play)
+            {
+                // Play mode: this PC must be on the car's own WiFi. The offer and answer cross Bluetooth.
+                await ClickAsync(cdp, "[data-test=garage-offline]");
+                await WaitForAsync(cdp, "[data-test=play-drive]", TimeSpan.FromSeconds(10), "the play mode panel");
+                string pw = (await EvalAsync(cdp, Deep("[data-test=play-password]") + ".textContent")).GetValue<string>();
+                if (pw != MiniRover.Protocol.CarLink.PlayPassword(Convert.FromHexString(keyHex))) throw new Exception("FAIL the app shows a different WiFi password than the car uses");
+                Console.WriteLine("PASS play panel shows the car's WiFi password");
+                await PickCarInChooserAsync(cdp, () => ClickAsync(cdp, "[data-test=play-drive]"));
+                sw.Restart();
+                await WaitForAsync(cdp, "[data-test=drive][data-state=connected]", TimeSpan.FromSeconds(95), "the drive page to connect over the car's own WiFi");
+                Console.WriteLine($"PASS connected in play mode (BLE signaling, no internet path) in {sw.ElapsedMilliseconds} ms after the chooser");
+            }
+            else
+            {
+                await ClickAsync(cdp, "[data-test=garage-drive]");
+                await WaitForAsync(cdp, "[data-test=drive][data-state=connected]", TimeSpan.FromSeconds(95), "the drive page to connect to the car");
+                Console.WriteLine($"PASS connected over WebRTC from Chrome in {sw.ElapsedMilliseconds} ms");
+            }
 
             int mv = await WaitForIntAsync(cdp, "[data-test=hud-battery]", "data-volts", v => v > 0, "battery telemetry");
             int rssi = await WaitForIntAsync(cdp, "[data-test=hud-wifi]", "data-rssi", v => v != 0, "WiFi signal telemetry");

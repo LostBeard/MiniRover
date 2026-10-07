@@ -73,15 +73,13 @@ namespace MiniRover.Car
                 if (wifi.InSetupMode && car.Face != null) car.Face.SetSystem(EyeArt.Setup());
             });
 
-            // BLE setup: always in setup mode; otherwise for a short window after every boot, so the app can
-            // confirm the car joined the network after setup, and so another device can pair (switch the car off
-            // and on, then "Add a car"). Pairing still needs the code shown on the eyes. Never while driving.
+            // BLE setup: always in setup and play mode (play mode signals WebRTC over it); otherwise for a short window
+            // after every boot, so the app can confirm the car joined the network after setup, so another device can
+            // pair (switch the car off and on, then "Add a car"), and so a paired app can switch the car to play mode.
+            // Pairing still needs the code shown on the eyes.
             var ble = new BleSetupService(car, wifi, settings, wifi.SetupSsid);
-            bool announce = !wifi.InSetupMode;
-            if (wifi.InSetupMode || announce)
-            {
-                Step(car, "ble", ble.Start);
-            }
+            bool announce = !wifi.InSetupMode && !wifi.InPlayMode;
+            Step(car, "ble", ble.Start);
             BleWindow window = null;
             if (announce)
             {
@@ -96,11 +94,21 @@ namespace MiniRover.Car
                 });
             }
 
-            // The app's WebRTC link: only on a real network (setup mode has no internet and no pairing yet).
+            // The app's WebRTC link: on the home network through the tracker, in play mode through BLE (setup mode has
+            // no pairing yet).
             RtcLinkService link = null;
-            if (wifi.Connected)
+            if (wifi.Connected || wifi.InPlayMode)
             {
-                link = new RtcLinkService(car, settings, wifi.SetupSsid);
+                link = new RtcLinkService(car, settings, wifi.SetupSsid, wifi.InPlayMode ? ble : null);
+                link.OnWifiMode = mode =>
+                {
+                    if (mode == BleSetup.WifiModePlay)
+                    {
+                        wifi.EnterPlayMode();
+                        return true;
+                    }
+                    return wifi.EnterHomeMode();
+                };
                 // An app that connects needs no BLE: close the window at once and give its memory to the session
                 // (measured: 6-7 KB of internal RAM left with a session up inside the window, 30 KB after it).
                 if (window != null) link.OnAppConnected = () => window.Close("app connected");
@@ -115,9 +123,11 @@ namespace MiniRover.Car
             // The eyes' system picture: setup target, X eyes on a flat battery, closed on USB power alone, otherwise
             // the app's choice. Everything else runs on its own threads.
             int shown = -1;
+            int tick = 0;
             while (true)
             {
                 Thread.Sleep(1000);
+                if (wifi.InPlayMode && ++tick % 10 == 0) LogPlayNetwork(link);
                 if (car.Face == null) continue;
                 int state = wifi.InSetupMode ? 1
                     : (car.Battery != null && car.Battery.Level == BatteryLevel.Critical) ? 2
@@ -142,6 +152,26 @@ namespace MiniRover.Car
                 System.Diagnostics.Debug.WriteLine("WiFi modem sleep: " + ex.Message);
             }
         }
+
+        /// <summary>Play mode health on the debug output: who is on the car's WiFi, and whether its DHCP server runs.</summary>
+        static void LogPlayNetwork(RtcLinkService link)
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("Play: stations " + MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetApStations)
+                    + ", AP " + Ip(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetApAddress))
+                    + " (lwIP " + Ip(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetApLwipAddress)) + ")"
+                    + ", DHCP server " + MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetApDhcpServer)
+                    + ", mode " + MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetWifiMode)
+                    + ", link " + (link != null ? link.Status : "none") + ", " + MemoryText());
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Play: " + ex.Message);
+            }
+        }
+
+        static string Ip(int a) => (a & 0xFF) + "." + ((a >> 8) & 0xFF) + "." + ((a >> 16) & 0xFF) + "." + ((a >> 24) & 0xFF);
 
         /// <summary>Native heaps, KB: internal free / largest block, PSRAM free / largest block.</summary>
         public static string MemoryText()

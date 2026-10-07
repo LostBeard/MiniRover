@@ -11,6 +11,9 @@ namespace MiniRover.Client;
 /// handshake on "ctrl". Commands are refused by the car until the handshake completes, and this side refuses a car
 /// that cannot prove it holds the same key.
 ///
+/// Play mode (the car's own WiFi, no internet): <see cref="ConnectOverBleAsync"/> takes the car's offer and returns
+/// the answer over BLE instead of the tracker; everything after that is the same.
+///
 /// Video frames arrive on <see cref="VideoChannel"/>. Browser consumers should read them with
 /// <c>OnArrayBufferMessage</c> so the JPEG bytes stay in JavaScript memory; desktop consumers use <c>OnBinaryMessage</c>.
 /// </summary>
@@ -23,6 +26,7 @@ public sealed class CarConnection : IAsyncDisposable
 
     TrackerSignalingClient? _tracker;
     RtcPeerConnectionRoomHandler? _handler;
+    IRTCPeerConnection? _pc; // play mode: one direct peer connection, no room
     RoomKey _room;
     IRTCDataChannel? _ctrl;
     string? _carPeerId;
@@ -92,6 +96,66 @@ public sealed class CarConnection : IAsyncDisposable
             await _ready.Task.ConfigureAwait(false);
         }
     }
+
+    /// <summary>
+    /// Play mode: asks the car for a session over BLE, answers its offer (host candidates only: this device and the
+    /// car share the car's own WiFi) and waits until both sides proved the key. Create the connection with
+    /// <c>iceServers: ""</c>: there is no internet to reach a STUN server.
+    /// <paramref name="releaseBle"/> runs as soon as the car took the answer: signaling is over, and the car's single
+    /// radio serves WiFi better during the ICE / DTLS handshake without a BLE connection beside it.
+    /// </summary>
+    public async Task ConnectOverBleAsync(CarBleSignaling signaling, CancellationToken ct = default, Func<Task>? releaseBle = null)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        SetStatus("asking the car over Bluetooth");
+        string offer = await signaling.GetOfferAsync().ConfigureAwait(false);
+
+        var pc = RTCPeerConnectionFactory.Create(_config);
+        _pc = pc;
+        const string carId = "car";
+        pc.OnDataChannel += ch => OnDataChannel(ch, carId);
+        pc.OnConnectionStateChange += state =>
+        {
+            if (state == "disconnected" || state == "failed" || state == "closed") OnPeerDisconnected(carId);
+        };
+        await pc.SetRemoteDescription(new RTCSessionDescriptionInit { Type = "offer", Sdp = offer }).ConfigureAwait(false);
+        var answer = await pc.CreateAnswer().ConfigureAwait(false);
+        await pc.SetLocalDescription(answer).ConfigureAwait(false);
+        // No trickle over BLE: the answer carries its candidates, so wait for gathering (host only: quick).
+        string sdp = await WaitForIceGatheringAsync(pc, answer.Sdp ?? "", ct).ConfigureAwait(false);
+        SetStatus($"sending the answer over Bluetooth ({sdp.Length} chars)");
+        await signaling.SendAnswerAsync(sdp).ConfigureAwait(false);
+        if (releaseBle != null)
+        {
+            try { await releaseBle().ConfigureAwait(false); } catch { /* the link matters, not a clean BLE close */ }
+        }
+        SetStatus("connecting over the car's WiFi");
+
+        using (ct.Register(() => _ready.TrySetCanceled(ct)))
+        {
+            await _ready.Task.ConfigureAwait(false);
+        }
+    }
+
+    static async Task<string> WaitForIceGatheringAsync(IRTCPeerConnection pc, string fallbackSdp, CancellationToken ct)
+    {
+        if (pc.IceGatheringState == "complete") return pc.LocalDescription?.Sdp ?? fallbackSdp;
+        var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Handler(string state) { if (state == "complete") done.TrySetResult(true); }
+        pc.OnIceGatheringStateChange += Handler;
+        try
+        {
+            if (pc.IceGatheringState != "complete") await Task.WhenAny(done.Task, Task.Delay(5000, ct)).ConfigureAwait(false);
+        }
+        finally
+        {
+            pc.OnIceGatheringStateChange -= Handler;
+        }
+        return pc.LocalDescription?.Sdp ?? fallbackSdp;
+    }
+
+    /// <summary>Asks the car to switch to play mode (its own WiFi) or back to its home network; the car restarts.</summary>
+    public void SetWifiMode(bool play) => Send([CarLink.MsgWifiMode, (byte)(play ? BleSetup.WifiModePlay : BleSetup.WifiModeHome)]);
 
     void OnDataChannel(IRTCDataChannel channel, string remotePeerId)
     {
@@ -277,6 +341,11 @@ public sealed class CarConnection : IAsyncDisposable
             _handler.OnPeerDisconnected -= OnPeerDisconnected;
             // Closes the peer connection, not only the channels, so the car sees the drop at once.
             try { _handler.Dispose(); } catch { }
+        }
+        if (_pc != null)
+        {
+            try { _pc.Close(); } catch { }
+            try { _pc.Dispose(); } catch { }
         }
         if (_tracker != null)
         {

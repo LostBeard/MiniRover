@@ -1,5 +1,6 @@
 using System.Text;
 using System.Threading.Channels;
+using MiniRover.Client;
 using MiniRover.Protocol;
 using SpawnDev.SpawnJS;
 using SpawnDev.SpawnJS.JSObjects;
@@ -11,7 +12,7 @@ namespace MiniRover.App.Services;
 /// the firmware compiles). Holds on to the BluetoothDevice across the car's reboot after SetWifi, so the app can
 /// reconnect without a second device picker and confirm the car joined the network.
 /// </summary>
-public sealed class CarSetupBle : IAsyncDisposable
+public sealed class CarSetupBle : IAsyncDisposable, ICarBle
 {
     readonly SpawnJSRuntime _js;
     readonly Channel<byte[]> _events = Channel.CreateUnbounded<byte[]>();
@@ -32,6 +33,14 @@ public sealed class CarSetupBle : IAsyncDisposable
     }
 
     public string Name => _device?.Name ?? "";
+    public bool HasDevice => _device != null;
+
+    /// <summary>Drops the BLE link but keeps the device, so <see cref="ConnectAsync"/> can reconnect without a picker.</summary>
+    public void Disconnect()
+    {
+        try { if (_server?.Connected == true) _server.Disconnect(); } catch { }
+        ReleaseGatt();
+    }
     public bool Connected => _server?.Connected == true;
 
     /// <summary>Shows the browser's device picker (must be called from a click), then connects.</summary>
@@ -97,9 +106,9 @@ public sealed class CarSetupBle : IAsyncDisposable
         return map;
     }
 
-    Task SendAsync(byte[] frame) => _control!.WriteValueWithResponse(frame);
+    public Task SendAsync(byte[] frame) => _control!.WriteValueWithResponse(frame);
 
-    async Task<byte[]> WaitForAsync(byte opcode, TimeSpan timeout)
+    public async Task<byte[]> WaitForAsync(byte opcode, TimeSpan timeout)
     {
         using var cts = new CancellationTokenSource(timeout);
         try
@@ -202,4 +211,4 @@ public sealed class CarSetupBle : IAsyncDisposable
 public sealed record WifiNetwork(string Ssid, int Rssi);
 
 /// <summary>An error message reported by the car itself.</summary>
-public sealed class CarSetupException(string message) : Exception(message);
+public sealed class CarSetupException(string message) : CarBleException(message);

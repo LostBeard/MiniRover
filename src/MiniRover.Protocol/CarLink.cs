@@ -61,6 +61,7 @@ namespace MiniRover.Protocol
         public const byte MsgPing = 0x2A;       // [token u32]: the car answers MsgPong with the same token (link round trip)
         public const byte MsgMotorTest = 0x29;  // [motor u8 0..3][percent i8][holdMs u16]: one wheel (setup / calibration)
         public const byte MsgFace = 0x2C;       // [mode][arg][ASCII text]: the eyes (Face* modes), animated on the car
+        public const byte MsgWifiMode = 0x2D;   // [BleSetup.WifiModeHome / WifiModePlay]: the car answers Text and restarts
 
         public const int TelemetryBytes = 22;
         public const int DriveBytes = 7;
@@ -77,6 +78,26 @@ namespace MiniRover.Protocol
         public static byte[] ClientProof(byte[] key, byte[] carNonce) => Hmac(key, Concat(Encoding.UTF8.GetBytes("client"), carNonce));
 
         public static byte[] CarProof(byte[] key, byte[] clientNonce) => Hmac(key, Concat(Encoding.UTF8.GetBytes("car"), clientNonce));
+
+        /// <summary>HMAC(key, label + nonce): one proof shape for every place the pairing key is proven.</summary>
+        public static byte[] Proof(byte[] key, string label, byte[] nonce) => Hmac(key, Concat(Encoding.UTF8.GetBytes(label), nonce));
+
+        /// <summary>Letters and digits that cannot be mistaken for each other when typed (no 0/o, 1/l/i).</summary>
+        const string PasswordAlphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+        public const int PlayPasswordLength = 10;
+
+        /// <summary>
+        /// The WPA2 password of the car's own WiFi in play mode, derived from the pairing key: every paired app can show
+        /// it, nobody without the key can join, and nothing extra has to be stored or sent. 10 characters from a
+        /// 31-character alphabet (about 49 bits).
+        /// </summary>
+        public static string PlayPassword(byte[] key)
+        {
+            byte[] mac = Hmac(key, Encoding.UTF8.GetBytes("minirover/ap/v1"));
+            char[] c = new char[PlayPasswordLength];
+            for (int i = 0; i < c.Length; i++) c[i] = PasswordAlphabet[mac[i] % PasswordAlphabet.Length];
+            return new string(c);
+        }
 
         // HashData, never `using (new HMACSHA256(key))`: nanoFramework's HMACSHA256 keeps the CALLER's key array (no
         // copy) and Dispose() clears it, so the first HMAC wiped the car's pairing key and every later proof was

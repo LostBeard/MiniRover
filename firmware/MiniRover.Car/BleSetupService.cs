@@ -11,8 +11,9 @@ namespace MiniRover.Car
     /// <summary>
     /// BLE side of the setup protocol (src/MiniRover.Protocol/BleSetup.cs): the web app finds the car over Web
     /// Bluetooth, proves the person can see the car (code on the LED eyes), then scans WiFi, hands over the
-    /// network and receives the pairing key. Runs only in setup mode, plus a short window after a BLE setup so
-    /// the app can confirm the car joined; it never runs alongside driving.
+    /// network and receives the pairing key. Runs in setup mode, for a short window after every boot, and all the time
+    /// in play mode, where it also carries the WebRTC offer and answer (no internet, so no tracker) for an app that
+    /// proved it holds the pairing key.
     /// </summary>
     public sealed class BleSetupService
     {
@@ -27,8 +28,18 @@ namespace MiniRover.Car
         GattLocalCharacteristic _events;
         bool _eventsSubscribed;
         bool _authorised;
+        bool _keyProven;     // the app holds the pairing key (not just the code on the eyes)
+        byte[] _keyNonce;    // one challenge, used once
         string _code;
         int _attemptsLeft;
+
+        // Play mode signaling (RtcLinkService): a request flag, and the answer assembled from its parts.
+        readonly AutoResetEvent _rtcRequest = new AutoResetEvent(false);
+        readonly AutoResetEvent _answerReady = new AutoResetEvent(false);
+        readonly byte[] _answerBuffer = new byte[BleSetup.MaxSdpBytes];
+        int _answerLength, _answerNext;
+        string _answer;
+        bool _rtcRequestPending;
 
         public bool Running { get; private set; }
 
@@ -70,10 +81,13 @@ namespace MiniRover.Car
                 lock (_lock)
                 {
                     _eventsSubscribed = sender.SubscribedClients.Length > 0;
+                    System.Diagnostics.Debug.WriteLine("BLE: app " + (_eventsSubscribed ? "subscribed" : "left"));
                     if (!_eventsSubscribed)
                     {
                         // The app went away: forget the authorisation and the code so a new visitor starts over.
                         _authorised = false;
+                        _keyProven = false;
+                        _keyNonce = null;
                         _code = null;
                         ShowEyes();
                     }
@@ -141,7 +155,22 @@ namespace MiniRover.Car
                         if (RequireAuth()) SetWifi(frame);
                         break;
                     case BleSetup.OpFinish:
-                        Stop();
+                        if (!_wifi.InPlayMode) Stop(); // play mode signals over BLE: it stays on
+                        break;
+                    case BleSetup.OpKeyHello:
+                        SendKeyChallenge();
+                        break;
+                    case BleSetup.OpKeyProof:
+                        CheckKeyProof(frame);
+                        break;
+                    case BleSetup.OpWifiMode:
+                        if (RequireKey()) SetWifiMode(frame);
+                        break;
+                    case BleSetup.OpRtcOffer:
+                        if (RequireKey()) RequestRtc();
+                        break;
+                    case BleSetup.OpRtcAnswer:
+                        if (RequireKey()) AddAnswerPart(frame);
                         break;
                     case BleSetup.OpServo:
                     case BleSetup.OpMotor:
@@ -211,6 +240,131 @@ namespace MiniRover.Car
             else if (left <= 0)
             {
                 ShowNewCode(); // 3 misses: a fresh code, so guessing gains nothing
+            }
+        }
+
+        void SendKeyChallenge()
+        {
+            byte[] nonce = new byte[CarLink.NonceBytes];
+            _rng.NextBytes(nonce);
+            lock (_lock) _keyNonce = nonce;
+            byte[] ev = new byte[1 + nonce.Length];
+            ev[0] = BleSetup.EvKeyChallenge;
+            Array.Copy(nonce, 0, ev, 1, nonce.Length);
+            Notify(ev);
+        }
+
+        void CheckKeyProof(byte[] frame)
+        {
+            byte[] key = _settings.RoomKey;
+            byte[] nonce;
+            lock (_lock)
+            {
+                nonce = _keyNonce;
+                _keyNonce = null; // one proof per challenge: a recorded proof cannot be replayed
+            }
+            if (key == null) { SendError("this car is not paired"); return; }
+            if (nonce == null) { SendError("ask for a challenge first"); return; }
+            bool ok = frame.Length == 1 + CarLink.ProofBytes && CarLink.ProofEquals(frame, 1, BleSetup.KeyProof(key, nonce));
+            if (ok)
+            {
+                lock (_lock)
+                {
+                    _keyProven = true;
+                    _authorised = true; // the key owner may also use every setup command
+                }
+            }
+            System.Diagnostics.Debug.WriteLine("BLE: pairing key proof " + (ok ? "OK" : "FAILED"));
+            Notify(new byte[] { BleSetup.EvAuthResult, (byte)(ok ? 1 : 0), 0 });
+        }
+
+        bool RequireKey()
+        {
+            if (_keyProven) return true;
+            SendError("prove the pairing key first");
+            return false;
+        }
+
+        void SetWifiMode(byte[] frame)
+        {
+            if (frame.Length < 2) { SendError("bad mode frame"); return; }
+            bool play = frame[1] == BleSetup.WifiModePlay;
+            if (!play)
+            {
+                if (_wifi.StationSsid.Length == 0) { SendError("no home network saved: set one up first"); return; }
+            }
+            if (_car.Drive != null) _car.Drive.Stop();
+            Notify(new byte[] { BleSetup.EvOk, BleSetup.OpWifiMode });
+            new Thread(() =>
+            {
+                Thread.Sleep(400); // let the notification leave before the radio goes down
+                if (play) _wifi.EnterPlayMode();
+                else _wifi.EnterHomeMode();
+            }).Start();
+        }
+
+        // ---- Play mode signaling (used by RtcLinkService) ----
+
+        /// <summary>True once a paired app asked for a session and the link has not taken the request yet.</summary>
+        public bool RtcRequestPending => _rtcRequestPending;
+
+        void RequestRtc()
+        {
+            if (!_wifi.InPlayMode) { SendError("not in play mode: the car connects through the internet"); return; }
+            lock (_lock)
+            {
+                _answerLength = _answerNext = 0;
+                _answer = null;
+                _rtcRequestPending = true;
+            }
+            _answerReady.Reset(); // an answer to an earlier request must not satisfy this one
+            _rtcRequest.Set();
+        }
+
+        /// <summary>Waits for an app's session request. Taking it clears <see cref="RtcRequestPending"/>.</summary>
+        public bool WaitForRtcRequest(int timeoutMs)
+        {
+            if (!_rtcRequest.WaitOne(timeoutMs, false)) return false;
+            _rtcRequestPending = false;
+            return true;
+        }
+
+        /// <summary>Sends the offer SDP in parts. False when no app is listening any more.</summary>
+        public bool SendOffer(string sdp)
+        {
+            byte[] utf8 = Encoding.UTF8.GetBytes(sdp);
+            for (int i = 0; ; i++)
+            {
+                if (!_eventsSubscribed) return false;
+                byte[] part = BleSetup.EncodeSdpPart(BleSetup.EvRtcOfferPart, utf8, i);
+                if (part == null) return true;
+                Notify(part);
+                Thread.Sleep(20); // let each notification out (as the scan results do)
+            }
+        }
+
+        /// <summary>The app's answer SDP, or null if it did not arrive in time.</summary>
+        public string WaitForAnswer(int timeoutMs)
+        {
+            if (!_answerReady.WaitOne(timeoutMs, false)) return null;
+            lock (_lock) return _answer;
+        }
+
+        void AddAnswerPart(byte[] frame)
+        {
+            int r;
+            string done = null;
+            lock (_lock)
+            {
+                r = BleSetup.AddSdpPart(frame, _answerBuffer, ref _answerLength, ref _answerNext);
+                if (r == 1) done = _answer = Encoding.UTF8.GetString(_answerBuffer, 0, _answerLength);
+                if (r != 0) _answerLength = _answerNext = 0;
+            }
+            if (r < 0) { SendError("answer part out of order or too long"); return; }
+            if (done != null)
+            {
+                Notify(new byte[] { BleSetup.EvOk, BleSetup.OpRtcAnswer });
+                _answerReady.Set();
             }
         }
 
@@ -406,7 +560,7 @@ namespace MiniRover.Car
             sb.Append("proto=").Append(BleSetup.Version.ToString()).Append('\n');
             sb.Append("name=").Append(_name).Append('\n');
             sb.Append("fw=").Append(Program.FirmwareVersion).Append('\n');
-            sb.Append("state=").Append(_wifi.InSetupMode ? "setup" : (_wifi.Connected ? "connected" : "offline")).Append('\n');
+            sb.Append("state=").Append(_wifi.InPlayMode ? "play" : _wifi.InSetupMode ? "setup" : (_wifi.Connected ? "connected" : "offline")).Append('\n');
             sb.Append("ip=").Append(_wifi.IpAddress).Append('\n');
             sb.Append("ssid=").Append(_wifi.StationSsid).Append('\n');
             sb.Append("wifiError=").Append(_settings.LastWifiError).Append('\n');

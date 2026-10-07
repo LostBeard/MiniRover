@@ -12,7 +12,7 @@ namespace MiniRover.ConsoleApp;
 /// Desktop (Windows) client for the car's BLE setup service. The browser app does the same over Web Bluetooth;
 /// this one exists so setup can be driven and tested from a PC with real Bluetooth hardware.
 /// </summary>
-public sealed class BleSetupClient : IAsyncDisposable
+public sealed class BleSetupClient : IAsyncDisposable, MiniRover.Client.ICarBle
 {
     readonly BlockingCollection<byte[]> _events = new();
     BluetoothLEDevice? _device;
@@ -100,10 +100,12 @@ public sealed class BleSetupClient : IAsyncDisposable
             if (left <= TimeSpan.Zero || !_events.TryTake(out byte[]? ev, left))
                 throw new TimeoutException($"no event 0x{opcode:X2} within {timeout.TotalSeconds:0} s");
             if (ev.Length == 0) continue;
-            if (ev[0] == BleSetup.EvError) throw new InvalidOperationException("car: " + Encoding.UTF8.GetString(ev, 1, ev.Length - 1));
+            if (ev[0] == BleSetup.EvError) throw new MiniRover.Client.CarBleException("car: " + Encoding.UTF8.GetString(ev, 1, ev.Length - 1));
             if (ev[0] == opcode) return ev;
         }
     }
+
+    public Task<byte[]> WaitForAsync(byte opcode, TimeSpan timeout) => Task.Run(() => WaitFor(opcode, timeout));
 
     public async Task RequestCodeAsync()
     {
@@ -171,10 +173,14 @@ public sealed class BleSetupClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Idempotent: play mode releases BLE as soon as signaling is done, and `await using` disposes again.
         if (_eventsChar != null)
         {
             try { await _eventsChar.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue.None); } catch { }
+            _eventsChar.Service?.Dispose(); // the GATT session holds the connection open until its service is released
         }
+        _eventsChar = _control = _info = null;
         _device?.Dispose();
+        _device = null;
     }
 }

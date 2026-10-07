@@ -39,6 +39,19 @@ namespace MiniRover.Car
         /// <summary>20-byte signaling room key (hex) shared with paired browsers; empty until first pairing.</summary>
         public string RoomKeyHex { get => GetString("pair.roomkey", ""); set => SetString("pair.roomkey", value); }
 
+        /// <summary>The pairing key, or null when the car is not paired.</summary>
+        public byte[] RoomKey
+        {
+            get
+            {
+                string hex = RoomKeyHex;
+                if (hex == null || hex.Length != 2 * MiniRover.Protocol.CarLink.KeyBytes) return null;
+                byte[] b = new byte[hex.Length / 2];
+                for (int i = 0; i < b.Length; i++) b[i] = (byte)Convert.ToInt32(hex.Substring(i * 2, 2), 16);
+                return b;
+            }
+        }
+
         // Camera (Docs/hardware.md). Size = esp32-camera framesize (6 = 320x240), quality 0..63 (lower = better).
         public int CameraSize { get => (int)GetDouble("camera.size", 6); set => Set("camera.size", value); }
         public int CameraQuality { get => (int)GetDouble("camera.quality", 12); set => Set("camera.quality", value); }
@@ -139,6 +152,10 @@ namespace MiniRover.Car
 
         /// <summary>Why the last WiFi connection attempt failed (shown to the app in setup mode).</summary>
         public string LastWifiError { get => GetString("wifi.error", ""); set => SetString("wifi.error", value); }
+
+        /// <summary>Play mode: the car makes its own WiFi (no internet; the app signals over BLE). Not a client key: it
+        /// changes only through WifiService, which also rewrites the network configuration and restarts.</summary>
+        public bool PlayMode { get => GetString("wifi.mode", "home") == "play"; set => SetString("wifi.mode", value ? "play" : "home"); }
 
         /// <summary>Every key a client may change (HTTP, BLE and the app link all go through <see cref="TryApply"/>).</summary>
         public static readonly string[] ClientKeys =

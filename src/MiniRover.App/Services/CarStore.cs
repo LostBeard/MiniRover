@@ -27,6 +27,10 @@ public sealed class SavedCar
     public string TrackerUrl { get; set; } = "";
 }
 
+/// <summary>Which car to drive, and how: through the internet (Ble null), or in play mode with the Bluetooth device
+/// the person picked (WebRTC signaling over BLE, the car's own WiFi).</summary>
+public sealed record DriveRequest(SavedCar Car, CarSetupBle? Ble);
+
 /// <summary>Paired cars, kept in this browser's localStorage.</summary>
 public sealed class CarStore
 {

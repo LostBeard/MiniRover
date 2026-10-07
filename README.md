@@ -57,6 +57,7 @@ Setup docs grow with the project:
 3. [Battery notes](Docs/battery.md)
 4. [Architecture](Docs/architecture.md)
 5. [Building the firmware](Docs/firmware-build.md) and [flashing the car](Docs/flashing.md)
+6. [Play mode: driving with no internet](Docs/play-mode.md) (the car makes its own WiFi; Bluetooth starts each connection)
 
 ## Repository layout
 

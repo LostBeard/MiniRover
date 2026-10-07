@@ -133,6 +133,24 @@
         </section>
 
         <section>
+            <h3>WiFi</h3>
+            @if (_s.Get("info.wifi") == "play")
+            {
+                <p data-test="wifi-mode">Play mode: the car makes its own WiFi <b>@Car.Name</b>, password
+                   <b class="mr-mono">@MiniRover.Protocol.CarLink.PlayPassword(Convert.FromHexString(Car.RoomKeyHex))</b>.</p>
+                <UiButton Secondary="true" OnClick="@(() => SwitchWifi(false))" data-test="wifi-home">Back to home WiFi</UiButton>
+            }
+            else
+            {
+                <p data-test="wifi-mode">On your home WiFi, through the internet. Play mode makes the car its own WiFi for driving
+                   with no internet (password <b class="mr-mono">@MiniRover.Protocol.CarLink.PlayPassword(Convert.FromHexString(Car.RoomKeyHex))</b>);
+                   connect from My cars, "No internet?".</p>
+                <UiButton Secondary="true" OnClick="@(() => SwitchWifi(true))" data-test="wifi-play">Play mode</UiButton>
+            }
+            <p class="mr-muted">The car restarts to switch.</p>
+        </section>
+
+        <section>
             <h3>Advanced</h3>
             <label class="mr-check"><input type="checkbox" checked="@_s.GetBool("http.api")" @onchange="@(e => Send("http.api", Bool(e)))" />
                 Local test API (HTTP on your network, for tinkering; anyone on the network could drive the car while it is on)</label>
@@ -148,6 +166,12 @@
 
 @code {
     [Parameter, EditorRequired] public CarConnection Link { get; set; } = default!;
+
+    void SwitchWifi(bool play)
+    {
+        try { Link.SetWifiMode(play); }
+        catch (Exception ex) { _lastReply = ex.Message; }
+    }
     [Parameter, EditorRequired] public SavedCar Car { get; set; } = default!;
     /// <summary>Latest battery reading from telemetry (volts).</summary>
     [Parameter] public double? Volts { get; set; }

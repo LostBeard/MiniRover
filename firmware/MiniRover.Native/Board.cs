@@ -27,6 +27,13 @@ namespace MiniRover.Native
         public const int MemPsramLargest = 3;
         public const int MemDmaFree = 4;
         public const int MemInternalMinimumEver = 5;
+        // Network diagnostics through FreeMemory (constants only, so the interop checksum stays the same).
+        public const int NetApStations = 100;
+        public const int NetApAddress = 101;       // IPv4, network order, as esp-netif has it
+        public const int NetApLwipAddress = 102;   // the same interface as lwIP has it
+        public const int NetApDhcpServer = 103;    // 0 init, 1 started, 2 stopped
+        public const int NetStaAddress = 104;
+        public const int NetWifiMode = 105;        // 0 off, 1 station, 2 access point, 3 both
 
         /// <summary>Native heap numbers in bytes (Mem* ids). Internal RAM is what runs out first on this board.</summary>
         [MethodImpl(MethodImplOptions.InternalCall)]

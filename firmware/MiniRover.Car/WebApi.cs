@@ -228,6 +228,22 @@ namespace MiniRover.Car
             string faults = _car.Faults;
             if (_http.StartError.Length > 0) faults += (faults.Length > 0 ? "; " : "") + _http.StartError;
 sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
+            try
+            {
+                // WiFi as the radio sees it (play mode / setup mode diagnostics): mode, the access point's address in
+                // esp-netif and in lwIP, its DHCP server, stations on it, the station's address.
+                sb.Append(",\"net\":{\"mode\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetWifiMode).ToString())
+                  .Append(",\"play\":").Append(B(_wifi.InPlayMode))
+                  .Append(",\"apStations\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetApStations).ToString())
+                  .Append(",\"apIp\":\"").Append(Ip(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetApAddress)))
+                  .Append("\",\"apLwipIp\":\"").Append(Ip(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetApLwipAddress)))
+                  .Append("\",\"apDhcpServer\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetApDhcpServer).ToString())
+                  .Append(",\"staIp\":\"").Append(Ip(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetStaAddress))).Append("\"}");
+            }
+            catch (Exception ex)
+            {
+                sb.Append(",\"netError\":\"").Append(JsonEscape(ex.Message)).Append('"');
+            }
             if (Link != null)
             {
                 sb.Append(",\"link\":{\"status\":\"").Append(JsonEscape(Link.Status)).Append("\",\"authenticated\":").Append(B(Link.Authenticated))
@@ -245,7 +261,8 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
                   .Append(",\"testDropped\":").Append(Link.Stat(SpawnDev.nanoFramework.WebRTC.PeerConnection.StatTestDropped).ToString())
                   .Append(",\"udpSendErrors\":").Append(SpawnDev.nanoFramework.WebRTC.PeerConnection.GetStat(-1, SpawnDev.nanoFramework.WebRTC.PeerConnection.StatUdpSendErrors).ToString())
                   .Append(",\"udpSendRetries\":").Append(SpawnDev.nanoFramework.WebRTC.PeerConnection.GetStat(-1, SpawnDev.nanoFramework.WebRTC.PeerConnection.StatUdpSendRetries).ToString())
-                  .Append(",\"videoFramesDropped\":").Append(Link.VideoFramesDropped.ToString()).Append('}');
+                  .Append(",\"videoFramesDropped\":").Append(Link.VideoFramesDropped.ToString())
+                  .Append(",\"ice\":\"").Append(JsonEscape(Link.LastIce)).Append("\"}");
             }
 
             BatteryService b = _car.Battery;
@@ -331,6 +348,9 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
         }
 
         static string B(bool v) => v ? "true" : "false";
+
+        /// <summary>IPv4 in network byte order (as lwIP keeps it) to dotted text.</summary>
+        static string Ip(int a) => (a & 0xFF) + "." + ((a >> 8) & 0xFF) + "." + ((a >> 16) & 0xFF) + "." + ((a >> 24) & 0xFF);
 
         static string JsonEscape(string s)
         {

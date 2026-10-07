@@ -71,6 +71,9 @@
 
 @code {
     [Parameter, EditorRequired] public SavedCar Car { get; set; } = default!;
+    /// <summary>Play mode: the car picked over Bluetooth. Each connection is signaled over BLE and runs on the car's own
+    /// WiFi; null = through the internet (tracker).</summary>
+    [Parameter] public CarSetupBle? Ble { get; set; }
     [Parameter] public EventCallback OnLeave { get; set; }
 
     // Commands go out at 20 Hz while driving; the car holds each for HoldMs and stops by itself if they stop coming
@@ -203,7 +206,9 @@
             attempt++;
             try
             {
-                _link = CarConnection.FromKeyHex(Car.RoomKeyHex, string.IsNullOrWhiteSpace(Car.TrackerUrl) ? null : Car.TrackerUrl);
+                _link = Ble != null
+                    ? new CarConnection(Convert.FromHexString(Car.RoomKeyHex), null, "") // no internet: host candidates only
+                    : CarConnection.FromKeyHex(Car.RoomKeyHex, string.IsNullOrWhiteSpace(Car.TrackerUrl) ? null : Car.TrackerUrl);
                 _link.OnStatus += s => { if (_state != "connected") { _status = s; _ = InvokeAsync(StateHasChanged); } };
                 _link.OnTelemetry += t => { _t = t; _frames++; };
                 _link.OnVideoChannel += ch => { _video = ch; _ = InvokeAsync(StateHasChanged); };
@@ -213,7 +218,20 @@
                 using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token))
                 {
                     timeout.CancelAfter(TimeSpan.FromSeconds(90));
-                    await _link.ConnectAsync(timeout.Token);
+                    if (Ble != null)
+                    {
+                        if (!Ble.Connected) await Ble.ConnectAsync(); // the device picked in the garage: no picker
+                        // BLE is let go as soon as the car took the answer: the session runs on WiFi, and the car's one
+                        // radio does the WiFi handshake better without a BLE connection beside it. The next (re)connect
+                        // opens BLE again without a picker.
+                        var ble = Ble;
+                        await _link.ConnectOverBleAsync(new CarBleSignaling(ble, Convert.FromHexString(Car.RoomKeyHex)), timeout.Token,
+                            () => { ble.Disconnect(); return Task.CompletedTask; });
+                    }
+                    else
+                    {
+                        await _link.ConnectAsync(timeout.Token);
+                    }
                 }
                 _state = "connected";
                 _status = attempt == 1 ? "connected" : "connected (reconnected)";
@@ -236,7 +254,10 @@
             }
             catch (Exception ex)
             {
-                _status = ex is OperationCanceledException ? "the car did not answer yet. Is it on and on WiFi? Still trying..." : ex.Message + ", retrying...";
+                _status = ex is OperationCanceledException
+                    ? (Ble != null ? "the car did not answer yet. Is it on, in play mode, and is this device on its WiFi? Still trying..."
+                                   : "the car did not answer yet. Is it on and on WiFi? Still trying...")
+                    : ex.Message + ", retrying...";
                 StateHasChanged();
             }
             finally
@@ -506,5 +527,6 @@
             _window.Dispose();
         }
         if (link != null) await link.DisposeAsync(); // idempotent: the loop's cleanup may have done it already
+        if (Ble != null) await Ble.DisposeAsync(); // play mode: the drive page owns the Bluetooth device it was given
     }
 }

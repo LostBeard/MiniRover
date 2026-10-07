@@ -11,6 +11,10 @@ namespace MiniRover.Car
     /// own thread: offer into the paired room on the tracker, take the first answer, open "ctrl" + "video", run the
     /// mutual key handshake, then accept commands and stream telemetry. Any failure or disconnect stops the motors and
     /// starts a fresh session (the deadman stops them anyway if commands stop arriving).
+    ///
+    /// In play mode (the car's own WiFi, no internet) the offer and answer travel over BLE instead of the tracker
+    /// (<see cref="BleSetupService"/>): a session starts when a paired app asks for one, ICE uses host candidates only,
+    /// and a new request from the app replaces a running session (the app reloaded or lost the old one).
     /// </summary>
     public sealed class RtcLinkService
     {
@@ -26,6 +30,7 @@ namespace MiniRover.Car
         readonly string _name;
         readonly Random _rng = new Random(); // hardware RNG on ESP32
         readonly byte[] _rx = new byte[PeerConnection.ReceiveHeaderBytes + 2048];
+        readonly BleSetupService _ble; // play mode signaling; null = tracker
 
         int _handle = -1;
         int _ctrlSid = -1;
@@ -40,6 +45,9 @@ namespace MiniRover.Car
         public string Status { get; private set; } = "idle";
 
         public delegate void LinkEvent();
+        public delegate bool WifiModeHandler(int mode);
+        /// <summary>Switches the car between its home network and play mode (restarts it); false = not possible.</summary>
+        public WifiModeHandler OnWifiMode;
         /// <summary>Called (on the link thread) each time an app proves the pairing key.</summary>
         public LinkEvent OnAppConnected;
         /// <summary>Control messages received from the app, and how many were drive commands (this session).</summary>
@@ -62,11 +70,16 @@ namespace MiniRover.Car
 
         public int VideoFramesDropped => _handle >= 0 ? PeerConnection.GetStat(_handle, PeerConnection.StatFramesDropped) : 0;
 
-        public RtcLinkService(Car car, Settings settings, string name)
+        /// <summary>The last connected session's ICE path (diagnostics for /status): selected remote candidate type and
+        /// address, peer-reflexive candidates learned, pairs, local candidates, ms from the answer to connected.</summary>
+        public string LastIce { get; private set; } = "";
+
+        public RtcLinkService(Car car, Settings settings, string name, BleSetupService bleSignaling)
         {
             _car = car;
             _settings = settings;
             _name = name;
+            _ble = bleSignaling;
         }
 
         public void Start()
@@ -91,7 +104,8 @@ namespace MiniRover.Car
                 {
                     EndSession();
                 }
-                Thread.Sleep(3000);
+                // BLE signaling: the app is waiting for the next offer, so no pause beyond letting the old one close.
+                Thread.Sleep(_ble != null ? 200 : 3000);
             }
         }
 
@@ -104,34 +118,11 @@ namespace MiniRover.Car
                 Thread.Sleep(10000);
                 return;
             }
-            Sessions++;
-            byte[] room = CarLink.DeriveRoomId(_key);
-            byte[] peerId = RandomId("-MR0001-");
-            byte[] offerId = RandomId("o");
-
-            _handle = PeerConnection.Create(CarLink.DefaultIceServers);
-            if (_handle < 0) throw new Exception("no peer connection slot / out of memory");
-            PeerConnection.CreateOffer(_handle);
-            string offer = WaitForLocalSdp(10000);
-            if (offer == null) throw new Exception("offer SDP not generated");
-
-            string answer = null;
-            using (var tracker = new TrackerSignaling(CarLink.DefaultTrackerUrl, RootCertificates.IsrgRootX1))
-            {
-                Status = "connecting to tracker";
-                if (!tracker.Connect()) throw new Exception("tracker: " + tracker.LastError);
-                for (int i = 0; i < AnnounceTries && answer == null; i++)
-                {
-                    Status = "waiting for the app";
-                    if (!tracker.AnnounceOffer(room, peerId, offerId, offer)) throw new Exception("announce failed: " + tracker.LastError);
-                    string answerer;
-                    answer = tracker.WaitForAnswer(offerId, AnswerWaitMs, out answerer);
-                    if (!tracker.IsOpen) throw new Exception("tracker closed: " + tracker.LastError);
-                }
-            } // tracker socket closed BEFORE DTLS: peak memory (SpawnWear)
+            string answer = _ble != null ? ExchangeOverBle() : ExchangeOverTracker();
             if (answer == null) return; // nobody came: fresh peer connection next session
 
             Status = "connecting";
+            long answeredAt = Environment.TickCount64;
             PeerConnection.SetRemoteDescription(_handle, answer);
             long deadline = Environment.TickCount64 + ConnectTimeoutMs;
             while (PeerConnection.GetState(_handle) != PeerConnection.StateCompleted)
@@ -143,6 +134,8 @@ namespace MiniRover.Car
                 }
                 Thread.Sleep(50);
             }
+            RecordIce(Environment.TickCount64 - answeredAt);
+            if (_ble != null) Mem("ICE + DTLS connected");
 
             // ICE "completed" comes before the SCTP association; Open waits for it.
             _ctrlSid = DataChannel.Open(_handle, CarLink.ControlChannel, PeerConnection.ChannelReliable, 0, ChannelOpenTimeoutMs);
@@ -153,11 +146,17 @@ namespace MiniRover.Car
             _rng.NextBytes(_carNonce);
             Send(CarLink.EncodeHello(_carNonce, _name));
             Status = "connected, waiting for app authentication";
-            System.Diagnostics.Debug.WriteLine("Link: connected (ctrl sid " + _ctrlSid + ", video sid " + _videoSid + ")");
+            System.Diagnostics.Debug.WriteLine("Link: connected (ctrl sid " + _ctrlSid + ", video sid " + _videoSid + ", " + LastIce + ")");
 
             long nextTelemetry = 0;
+            bool replaced = false;
             while (PeerConnection.GetState(_handle) == PeerConnection.StateCompleted)
             {
+                if (_ble != null && _ble.RtcRequestPending)
+                {
+                    replaced = true; // the app asked again: it reloaded or lost this session
+                    break;
+                }
                 // Drain a bounded batch, then always fall through to telemetry: with video running the car handled only
                 // ~12 drive messages/s, the app sent 20/s, and an unbounded drain never reached the telemetry send.
                 // Drive commands are coalesced: only the newest one in the batch moves the motors.
@@ -183,7 +182,93 @@ namespace MiniRover.Car
                 }
                 Thread.Sleep(10);
             }
-            Status = "disconnected";
+            Status = replaced ? "replaced by a new session from the app" : "disconnected";
+        }
+
+        /// <summary>Play mode: waits for a paired app to ask over BLE, then sends a host-only offer and waits for the
+        /// answer. Null when nobody asked (the caller loops).</summary>
+        string ExchangeOverBle()
+        {
+            Status = "waiting for the app (BLE)";
+            if (!_ble.WaitForRtcRequest(30000)) return null;
+            Sessions++;
+            // No ICE servers: there is no internet on the car's own network, and a STUN lookup would only wait.
+            Mem("session request");
+            _handle = PeerConnection.Create("");
+            if (_handle < 0) throw new Exception("no peer connection slot / out of memory");
+            Mem("peer connection created");
+            PeerConnection.CreateOffer(_handle);
+            string offer = WaitForLocalSdp(10000);
+            if (offer == null) throw new Exception("offer SDP not generated");
+            Mem("offer ready");
+            Status = "sending the offer over BLE";
+            if (!_ble.SendOffer(offer)) throw new Exception("the app left BLE before the offer was sent");
+            string answer = _ble.WaitForAnswer(20000);
+            if (answer == null) throw new Exception("no answer over BLE");
+            Mem("answer received");
+            LogSdpSummary(answer);
+            return answer;
+        }
+
+        /// <summary>Normal mode: offers into the paired room on the tracker until an app answers (a minute). Null when
+        /// nobody answered (the caller starts a fresh peer connection).</summary>
+        string ExchangeOverTracker()
+        {
+            Sessions++;
+            byte[] room = CarLink.DeriveRoomId(_key);
+            byte[] peerId = RandomId("-MR0001-");
+            byte[] offerId = RandomId("o");
+
+            _handle = PeerConnection.Create(CarLink.DefaultIceServers);
+            if (_handle < 0) throw new Exception("no peer connection slot / out of memory");
+            PeerConnection.CreateOffer(_handle);
+            string offer = WaitForLocalSdp(10000);
+            if (offer == null) throw new Exception("offer SDP not generated");
+
+            string answer = null;
+            using (var tracker = new TrackerSignaling(CarLink.DefaultTrackerUrl, RootCertificates.IsrgRootX1))
+            {
+                Status = "connecting to tracker";
+                if (!tracker.Connect()) throw new Exception("tracker: " + tracker.LastError);
+                for (int i = 0; i < AnnounceTries && answer == null; i++)
+                {
+                    Status = "waiting for the app";
+                    if (!tracker.AnnounceOffer(room, peerId, offerId, offer)) throw new Exception("announce failed: " + tracker.LastError);
+                    string answerer;
+                    answer = tracker.WaitForAnswer(offerId, AnswerWaitMs, out answerer);
+                    if (!tracker.IsOpen) throw new Exception("tracker closed: " + tracker.LastError);
+                }
+            } // tracker socket closed BEFORE DTLS: peak memory (SpawnWear)
+            return answer;
+        }
+
+        // Play mode memory trace (BLE stays on beside the session there; internal RAM is the tight resource).
+        static void Mem(string step) => System.Diagnostics.Debug.WriteLine("Link mem, " + step + ": " + Program.MemoryText());
+
+        /// <summary>Length, candidates and fingerprint of an SDP that crossed BLE (to compare with what the app sent).</summary>
+        static void LogSdpSummary(string sdp)
+        {
+            System.Diagnostics.Debug.WriteLine("Link: answer " + sdp.Length + " chars");
+            foreach (string line in sdp.Split('\n'))
+            {
+                // Not a=ice-pwd: a session secret has no place in a log.
+                if (line.StartsWith("a=candidate") || line.StartsWith("a=fingerprint") || line.StartsWith("a=ice-ufrag") || line.StartsWith("a=setup"))
+                {
+                    System.Diagnostics.Debug.WriteLine("Link:   " + line.Trim());
+                }
+            }
+        }
+
+        void RecordIce(long connectMs)
+        {
+            int type = PeerConnection.GetStat(_handle, PeerConnection.StatIceSelectedType);
+            int a = PeerConnection.GetStat(_handle, PeerConnection.StatIceSelectedAddress);
+            string typeName = type == 0 ? "host" : type == 1 ? "srflx" : type == 2 ? "prflx" : type == 3 ? "relay" : "none";
+            LastIce = typeName + " " + (a & 0xFF) + "." + ((a >> 8) & 0xFF) + "." + ((a >> 16) & 0xFF) + "." + ((a >> 24) & 0xFF)
+                + ", learned " + PeerConnection.GetStat(_handle, PeerConnection.StatIcePrflxLearned)
+                + ", pairs " + PeerConnection.GetStat(_handle, PeerConnection.StatIceCandidatePairs)
+                + ", local " + PeerConnection.GetStat(_handle, PeerConnection.StatIceLocalCandidates)
+                + ", " + connectMs + " ms";
         }
 
         void Handle(int len)
@@ -318,6 +403,24 @@ namespace MiniRover.Car
                         _car.Face.ShowCustom(eyes);
                     }
                     break;
+                case CarLink.MsgWifiMode:
+                    if (len >= 2 && OnWifiMode != null)
+                    {
+                        int mode = _rx[o + 1];
+                        Send(CarLink.EncodeText(mode == BleSetup.WifiModePlay
+                            ? "switching to play mode: the car restarts with its own WiFi"
+                            : "switching to the home network: the car restarts"));
+                        if (_car.Drive != null) _car.Drive.Stop();
+                        WifiModeHandler handler = OnWifiMode;
+                        new Thread(() =>
+                        {
+                            Thread.Sleep(500); // let the text leave before the radio goes down
+                            bool ok = false;
+                            try { ok = handler(mode); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine("WiFi mode: " + ex.Message); }
+                            if (!ok) Send(CarLink.EncodeText("refused: no home network saved (set one up over BLE)"));
+                        }).Start();
+                    }
+                    break;
                 case CarLink.MsgFace:
                     if (_car.Face != null && CarLink.TryDecodeFace(_rx, o, len, out int faceMode, out int faceArg, out string faceText))
                     {
@@ -331,6 +434,7 @@ namespace MiniRover.Car
         {
             string info = "info.firmware=" + Program.FirmwareVersion + "\n"
                 + "info.name=" + _name + "\n"
+                + "info.wifi=" + (_ble != null ? "play" : "home") + "\n"
                 + "info.camera=" + _car.CameraSensor + "\n"
                 + _car.DescribeSensor()   // live sensor control values (set ones and driver defaults)
                 + "info.faults=" + _car.Faults + "\n"; // faults are joined with "; ", never line breaks
@@ -395,6 +499,7 @@ namespace MiniRover.Car
                 try { PeerConnection.Close(_handle); } catch { }
             }
             _handle = -1;
+            if (_ble != null) Mem("session closed");
             _ctrlSid = _videoSid = -1;
             _lastDriveSeq = -1;
             ControlMessages = DriveMessages = TelemetrySent = SendFailures = 0;

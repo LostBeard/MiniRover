@@ -1,4 +1,7 @@
+@using MiniRover.Client
+@using MiniRover.Protocol
 @inject CarStore Cars
+@inject SpawnJSRuntime JS
 
 <UiCard Title="My cars">
     @if (_cars.Count == 0)
@@ -20,10 +23,40 @@
                         </div>
                     </div>
                     <UiStack Horizontal="true" Gap="0.5rem">
-                        <UiButton OnClick="@(() => OnDrive.InvokeAsync(car))" data-test="garage-drive">Drive</UiButton>
+                        <UiButton OnClick="@(() => OnDrive.InvokeAsync(new DriveRequest(car, null)))" data-test="garage-drive">Drive</UiButton>
+                        <UiButton Secondary="true" OnClick="@(() => ToggleOffline(car))" data-test="garage-offline">No internet?</UiButton>
                         <UiButton Secondary="true" OnClick="@(() => Forget(car))">Forget</UiButton>
                     </UiStack>
                 </div>
+                @if (_offlineCar == car)
+                {
+                    <div class="mr-play" data-test="garage-play">
+                        <p>
+                            <b>Play mode</b>: the car makes its own WiFi and this device drives it directly, with no internet
+                            (a park, a car trip). Bluetooth carries the start of each connection, so stay within a few metres
+                            when you press Drive.
+                        </p>
+                        <ol>
+                            <li>
+                                Put the car in play mode: <UiButton Secondary="true" OnClick="@(() => SetMode(car, true))" disabled="@_busy" data-test="play-on">Play mode (Bluetooth)</UiButton>
+                                (or press "Play mode" in the drive page's settings while it is connected). The car restarts.
+                                A car that cannot find its home WiFi goes into play mode by itself.
+                            </li>
+                            <li>
+                                Join its WiFi on this device: network <b data-test="play-ssid">@car.Name</b>, password
+                                <b class="mr-mono" data-test="play-password">@PlayPassword(car)</b>
+                            </li>
+                            <li><UiButton OnClick="@(() => DriveOffline(car))" disabled="@_busy" data-test="play-drive">Drive without internet</UiButton></li>
+                        </ol>
+                        <p>
+                            Back home: <UiButton Secondary="true" OnClick="@(() => SetMode(car, false))" disabled="@_busy" data-test="play-off">Home WiFi (Bluetooth)</UiButton>
+                        </p>
+                        @if (_playStatus.Length > 0)
+                        {
+                            <p class="mr-muted" data-test="play-status">@_playStatus</p>
+                        }
+                    </div>
+                }
             }
         </UiStack>
         <p class="mr-muted">Switch the car on and press Drive. It connects through the internet, so it works on any WiFi the car knows.</p>
@@ -32,9 +65,12 @@
 
 @code {
     [Parameter] public EventCallback OnAddCar { get; set; }
-    [Parameter] public EventCallback<SavedCar> OnDrive { get; set; }
+    [Parameter] public EventCallback<DriveRequest> OnDrive { get; set; }
 
     List<SavedCar> _cars = new();
+    SavedCar? _offlineCar;
+    string _playStatus = "";
+    bool _busy;
 
     protected override void OnInitialized() => _cars = Cars.GetAll().OrderBy(c => c.Name).ToList();
 
@@ -42,5 +78,61 @@
     {
         Cars.Remove(car.Name);
         _cars = Cars.GetAll().OrderBy(c => c.Name).ToList();
+    }
+
+    void ToggleOffline(SavedCar car)
+    {
+        _offlineCar = _offlineCar == car ? null : car;
+        _playStatus = "";
+    }
+
+    static string PlayPassword(SavedCar car) => CarLink.PlayPassword(Convert.FromHexString(car.RoomKeyHex));
+
+    /// <summary>Opens the browser's Bluetooth picker (needs this click), proves the key and switches the WiFi mode.</summary>
+    async Task SetMode(SavedCar car, bool play)
+    {
+        _busy = true;
+        _playStatus = "choose " + car.Name + " in the Bluetooth window...";
+        var ble = new CarSetupBle(JS);
+        try
+        {
+            await ble.PickAndConnectAsync();
+            _playStatus = "switching...";
+            StateHasChanged();
+            await new CarBleSignaling(ble, Convert.FromHexString(car.RoomKeyHex)).SetWifiModeAsync(play);
+            _playStatus = play
+                ? "The car is restarting in play mode. In a few seconds, join its WiFi (above), then press Drive without internet."
+                : "The car is restarting on its home WiFi. Use Drive as usual.";
+        }
+        catch (Exception ex)
+        {
+            _playStatus = ex.Message;
+        }
+        finally
+        {
+            await ble.DisposeAsync();
+            _busy = false;
+        }
+    }
+
+    /// <summary>Picks the car over Bluetooth during this click (the browser requires it), then opens the drive page,
+    /// which keeps the device for its BLE signaling and reconnects.</summary>
+    async Task DriveOffline(SavedCar car)
+    {
+        _busy = true;
+        _playStatus = "choose " + car.Name + " in the Bluetooth window...";
+        var ble = new CarSetupBle(JS);
+        try
+        {
+            await ble.PickAndConnectAsync();
+            _busy = false;
+            await OnDrive.InvokeAsync(new DriveRequest(car, ble));
+        }
+        catch (Exception ex)
+        {
+            _playStatus = ex.Message;
+            await ble.DisposeAsync();
+            _busy = false;
+        }
     }
 }

@@ -13,11 +13,11 @@
     <main class="mr-main">
         @if (_view == View.Drive && _driving != null)
         {
-            <Drive Car="_driving" OnLeave="@(() => Show(View.Garage))" />
+            <Drive Car="_driving.Car" Ble="_driving.Ble" OnLeave="@(() => Show(View.Garage))" />
         }
         else if (_view == View.Garage)
         {
-            <Garage OnAddCar="@(() => Show(View.Setup))" OnDrive="@(car => { _driving = car; _view = View.Drive; })" />
+            <Garage OnAddCar="@(() => Show(View.Setup))" OnDrive="@(req => { _driving = req; _view = View.Drive; })" />
         }
         else
         {
@@ -34,7 +34,7 @@
 @code {
     enum View { Garage, Setup, Drive }
     View _view;
-    SavedCar? _driving;
+    DriveRequest? _driving;
 
     protected override void OnInitialized()
     {

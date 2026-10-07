@@ -115,6 +115,7 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [x] `MiniRover.Console link` drives the real car (`MiniRover.Client.CarConnection`, shared with the browser app)
 - [x] WiFi modem sleep off once the BLE window closes (ESP-IDF requires it while Bluetooth is on): 60 status polls max 0.43 s, median 0.18 s (one earlier poll had stalled 1.4 s with it on)
 - [x] HTTP test API off by default (`http.api`, settable only over paired channels); `/status` and `/stop` stay open; verified on the car (403 / 200). Docs/car-api.md
+- [ ] Report upstream: nanoFramework ESP32 `Options & AutoConnect` composite-flag test and the soft AP without a DHCP server (MiniRover nf-interpreter fork fd95ef87, 5a8193fb)
 - [ ] Report upstream: nanoFramework `HMACSHA256(byte[] key)` keeps the caller's array and `Dispose()` zeroes it (wiped the car's pairing key; MiniRover uses `HashData`)
 
 ### Phase 4 - Browser app
@@ -141,7 +142,16 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 
 ### Phase 5 - Hosting and releases
 - [x] Offline app (PWA): web manifest + icons (MiniRover's own eye art), a .NET service worker (SpawnJS.WebWorkers) that caches all 123 published files per build; page loads network-first, files cache-first. `offlinetest`: with the web server gone and every service worker stopped, the app reopens from a cold worker in 2.6 s. Needed SpawnJS.WebWorkers 2.2.2 (released): the .NET worker could not start offline, and ImportServiceWorkerAssets did nothing with the classic bundle The hosted app (GitHub Pages) passes too: after one online visit it reopened in 0.96 s with lostbeard.github.io unreachable (`offlinetest https://lostbeard.github.io/MiniRover/`)
-- [ ] Driving offline: AP play mode on the car (from the app over the live link, or BLE), WebRTC offer/answer over BLE, host-only ICE (check libpeer with Chrome's mDNS host candidates), memory with BLE + session + camera
+- [x] Driving offline (play mode, Docs/play-mode.md): the car is its own WPA2 access point (name = the car's name, password derived from the pairing key, `CarLink.PlayPassword`); switched from the drive page's Settings (live link, `MsgWifiMode`) or over BLE (`OpWifiMode` after a pairing-key proof); a paired car that cannot reach its home WiFi goes to play mode instead of setup mode. WebRTC offer/answer cross BLE in 160-byte parts (`OpRtcOffer` / `OpRtcAnswer`, key proof `OpKeyHello` / `OpKeyProof`); host-only ICE. **Chrome drivetest --play: ALL PASS** (2026-10-07): connected 8.5 s after the Bluetooth chooser, video 10.7 fps decoded, link round trip 123 ms, telemetry 4/s, drive / lights / eyes / settings / GPU clean-up / wheel test. Desktop (`link --ble`) 5 of 5: 8.5-11.7 s, ICE + DTLS 3.6-4.4 s. Found and fixed on the way:
+  - nanoFramework ESP32 builds have NO soft-AP DHCP server (`CONFIG_LWIP_DHCPS=n` upstream); turned on for MINIROVER_ESP32 and started when a station joins (esp_netif left it in INIT). The WiFi setup page at 192.168.4.1 never worked over WiFi before this either.
+  - nanoFramework tested `Options & AutoConnect` (AutoConnect = 4 | Enable), so an Enable-only station joined the home network anyway; fixed in the nf-interpreter fork (fd95ef87). Report upstream.
+  - libpeer resolved Chrome's mDNS candidate on the CLR thread (up to 15 s frozen); now peer-reflexive candidates are learned from the peer's checks, host candidates on every interface (libpeer f73b735).
+  - DTLS refused a peer certificate as "not yet valid": no SNTP offline, the car's clock is near 1970. Dates are ignored now (identity = SDP fingerprint); the car's own certificate expired 2028-01-01, now 2099.
+  - Internal RAM: the WebRTC pump's 16 KB stack left 4 KB internal free with BLE on (ICE 20 s late, DTLS failed); the stack is in PSRAM now, 20 KB free during a session.
+  - The app lets go of BLE as soon as the car took the answer: with BLE connected through the DTLS handshake only 1 of 3 sessions came up; after, 5 of 5.
+  - Telemetry WiFi signal in play mode = the strongest device on the car's network (was 0).
+- [ ] Play mode speed: video 10.7 fps vs 14.7 at home, round trip 123 vs 44 ms. Pausing BLE advertising during a session made it worse (measured, reverted). Next: measure without BLE at all, and AP+STA vs AP-only.
+- [ ] Internet path connect time varied 8-42 s today (6.6 s yesterday) with BOTH today's and the old firmware; ICE itself takes 1.8-2.9 s, so the time is in tracker signaling / session start. Investigate (hub tracker, announce timing).
 - [x] GitHub Pages deployment of the browser app (https://lostbeard.github.io/MiniRover/, verified driving the car)
 - [ ] Firmware images as GitHub Release assets + flashing guide
 

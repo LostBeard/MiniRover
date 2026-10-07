@@ -37,6 +37,8 @@ static class CarKeys
 ///   drive &lt;left%&gt; &lt;right%&gt; &lt;ms&gt;   resend every 100 ms for ms, then stop sending (the car's deadman stops it)
 ///   once &lt;left%&gt; &lt;right%&gt; &lt;hold&gt;  send ONE drive frame and time how long until telemetry says stopped
 ///   servo &lt;pan&gt; &lt;tilt&gt; | leds &lt;r&gt; &lt;g&gt; &lt;b&gt; | beep &lt;hz&gt; &lt;ms&gt; | stop | wait &lt;ms&gt; | telemetry &lt;ms&gt;
+///   wifimode play|home   (the car restarts into play mode / onto its home network)
+/// --ble: play mode, the offer and answer travel over BLE and the link runs on the car's own WiFi.
 /// With no commands: connect, print telemetry for 5 s, disconnect.
 /// </summary>
 static class LinkCommand
@@ -44,6 +46,7 @@ static class LinkCommand
     public static async Task<int> RunAsync(string[] args)
     {
         string? carName = null, keyHex = null, tracker = null;
+        bool ble = false;
         var script = new List<string>();
         for (int i = 1; i < args.Length; i++)
         {
@@ -52,6 +55,7 @@ static class LinkCommand
                 case "--car": carName = args[++i]; break;
                 case "--key": keyHex = args[++i]; break;
                 case "--tracker": tracker = args[++i]; break;
+                case "--ble": ble = true; break; // play mode: offer/answer over BLE, no tracker, no STUN
                 case "--trace":
                     // SipSorcery's own log (ICE, DTLS, SCTP) on the console, to see the desktop side of a link problem.
                     SIPSorcery.LogFactory.Set(Microsoft.Extensions.Logging.LoggerFactory.Create(b =>
@@ -73,7 +77,8 @@ static class LinkCommand
             carName = car.Name;
         }
 
-        await using var link = CarConnection.FromKeyHex(keyHex, tracker);
+        await using var link = ble ? new CarConnection(Convert.FromHexString(keyHex), null, "") : CarConnection.FromKeyHex(keyHex, tracker);
+        await using var bleClient = ble ? new BleSetupClient() : null;
         var sw = Stopwatch.StartNew();
         link.OnStatus += s => Console.WriteLine($"[{sw.ElapsedMilliseconds,6} ms] {s}");
         int telemetryCount = 0;
@@ -96,10 +101,20 @@ static class LinkCommand
         link.OnVideoChannel += ch => ch.OnBinaryMessage += f => { videoFrames++; videoBytes += f.Length; lastFrame = f; };
         link.OnText += t => Console.WriteLine("  car says: " + t);
 
-        Console.WriteLine($"connecting to '{carName ?? "car"}' via {tracker ?? CarLink.DefaultTrackerUrl} (switch the car on if it is off)");
+        Console.WriteLine($"connecting to '{carName ?? "car"}' via {(ble ? "BLE + the car's own WiFi" : tracker ?? CarLink.DefaultTrackerUrl)} (switch the car on if it is off)");
         using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120)))
         {
-            await link.ConnectAsync(cts.Token);
+            if (bleClient != null)
+            {
+                await bleClient.ConnectAsync(carName ?? "MiniRover", TimeSpan.FromSeconds(30));
+                Console.WriteLine($"[{sw.ElapsedMilliseconds,6} ms] BLE connected to {bleClient.DeviceName}");
+                await link.ConnectOverBleAsync(new CarBleSignaling(bleClient, Convert.FromHexString(keyHex)), cts.Token,
+                    async () => { await bleClient.DisposeAsync(); Console.WriteLine($"[{sw.ElapsedMilliseconds,6} ms] BLE released"); });
+            }
+            else
+            {
+                await link.ConnectAsync(cts.Token);
+            }
         }
         Console.WriteLine($"connected to {link.CarName} (protocol {link.CarProtocolVersion}) in {sw.ElapsedMilliseconds} ms");
 
@@ -228,6 +243,7 @@ static class LinkCommand
                 case "leds": link.Leds(byte.Parse(p[1]), byte.Parse(p[2]), byte.Parse(p[3])); break;
                 case "beep": link.Buzzer(int.Parse(p[1]), int.Parse(p[2])); break;
                 case "wait": await Task.Delay(int.Parse(p[1])); break;
+                case "wifimode": link.SetWifiMode(p[1] == "play"); await Task.Delay(1500); break; // the car answers Text, then restarts
                 default: Console.WriteLine("  unknown command"); break;
             }
         }

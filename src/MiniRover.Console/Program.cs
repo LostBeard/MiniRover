@@ -7,6 +7,42 @@ using MiniRover.ConsoleApp;
 // minirover link [--car name] [--key hex] ["drive 40 40 1000; servo 90 120; ..."]   (see LinkCommand.cs)
 if (args.Length >= 1 && args[0] == "link") return await LinkCommand.RunAsync(args);
 
+// minirover playinfo [car name]   the car's play-mode WiFi: name and password (derived from the pairing key)
+if (args.Length >= 1 && args[0] == "playinfo")
+{
+    var cars = CarKeys.Load();
+    var car = args.Length > 1 ? cars.FirstOrDefault(c => c.Name == args[1]) : cars.LastOrDefault();
+    if (car.KeyHex == null) { Console.WriteLine("no pairing key saved"); return 2; }
+    Console.WriteLine($"{car.Name} {MiniRover.Protocol.CarLink.PlayPassword(Convert.FromHexString(car.KeyHex))}");
+    return 0;
+}
+
+// minirover playmode on|off|check [car name]   over BLE with the pairing key: switch the car's WiFi mode (it restarts),
+// or only prove the key (check: holds the BLE link 5 s, for memory measurements)
+if (args.Length >= 2 && args[0] == "playmode")
+{
+    var cars = CarKeys.Load();
+    var car = args.Length > 2 ? cars.FirstOrDefault(c => c.Name == args[2]) : cars.LastOrDefault();
+    if (car.KeyHex == null) { Console.WriteLine("no pairing key saved"); return 2; }
+    var clock = System.Diagnostics.Stopwatch.StartNew();
+    await using (var ble = new BleSetupClient())
+    {
+        await ble.ConnectAsync(car.Name, TimeSpan.FromSeconds(30));
+        Console.WriteLine($"[{clock.ElapsedMilliseconds,6} ms] BLE connected to {ble.DeviceName}");
+        var signaling = new MiniRover.Client.CarBleSignaling(ble, Convert.FromHexString(car.KeyHex));
+        await signaling.ProveKeyAsync();
+        Console.WriteLine($"[{clock.ElapsedMilliseconds,6} ms] pairing key accepted");
+        if (args[1] == "check") await Task.Delay(5000);
+        else
+        {
+            await signaling.SetWifiModeAsync(args[1] == "on");
+            Console.WriteLine($"[{clock.ElapsedMilliseconds,6} ms] the car restarts {(args[1] == "on" ? "in play mode" : "on its home WiFi")}");
+        }
+    }
+    Console.WriteLine($"[{clock.ElapsedMilliseconds,6} ms] BLE closed");
+    return 0;
+}
+
 // minirover reboot <COMx>   restart the car's program (CLR) over USB, as if it had restarted
 if (args.Length >= 2 && args[0] == "reboot")
 {
@@ -45,7 +81,7 @@ if (args.Length >= 2 && args[0] == "offlinetest")
     return await MiniRover.ConsoleApp.OfflineTest.RunAsync(args[1], args.Length > 2 ? int.Parse(args[2]) : 8643, args.Length > 3 ? int.Parse(args[3]) : 9243);
 }
 
-// minirover drivetest <publish wwwroot> [httpPort] [cdpPort] [screenshotDir] [--reboot COMx] [--loss permille] [--car http://ip] [--quiet]   (THE WHEELS MUST BE OFF THE GROUND; --quiet: no motors, buzzer or 12 LEDs)
+// minirover drivetest <publish wwwroot> [httpPort] [cdpPort] [screenshotDir] [--reboot COMx] [--loss permille] [--car http://ip] [--quiet] [--play]   (THE WHEELS MUST BE OFF THE GROUND; --quiet: no motors, buzzer or 12 LEDs)
 if (args.Length >= 2 && args[0] == "drivetest")
 {
     return await DriveTest.RunAsync(args[1],
@@ -56,7 +92,8 @@ if (args.Length >= 2 && args[0] == "drivetest")
         int.TryParse(args.SkipWhile(a => a != "--loss").Skip(1).FirstOrDefault(), out int lossArg) ? lossArg : 0,
         args.SkipWhile(a => a != "--car").Skip(1).FirstOrDefault(),
         args.Contains("--calibrate-lights"),
-        args.Contains("--quiet"));
+        args.Contains("--quiet"),
+        args.Contains("--play"));
 }
 
 // minirover webtest <publish wwwroot> <COMx> [httpPort] [cdpPort] [screenshotDir]
