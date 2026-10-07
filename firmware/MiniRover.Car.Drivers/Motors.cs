@@ -55,6 +55,22 @@ namespace MiniRover.Car.Drivers
 
         public double GetSpeed(int motor) => _current[motor];
 
+        /// <summary>Mean PWM duty over the four motors, 0..1 (0 = all stopped): the battery gauge's load measure.
+        /// Uses the same speed-to-duty mapping as <see cref="Set"/>, minimum duty included.</summary>
+        public double Load
+        {
+            get
+            {
+                double sum = 0;
+                for (int i = 0; i < Count; i++)
+                {
+                    double s = _current[i] < 0 ? -_current[i] : _current[i];
+                    if (s > 0) sum += (MinimumDuty + s * (Pca9685.Resolution - 1 - MinimumDuty)) / (Pca9685.Resolution - 1);
+                }
+                return sum / Count;
+            }
+        }
+
         public void Set(int motor, double speed)
         {
             speed = Clamp(speed, -1, 1);

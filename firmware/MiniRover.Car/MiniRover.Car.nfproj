@@ -18,6 +18,9 @@
   </PropertyGroup>
   <Import Project="$(NanoFrameworkProjectSystemPath)NFProjectSystem.props" Condition="Exists('$(NanoFrameworkProjectSystemPath)NFProjectSystem.props')" />
   <ItemGroup>
+    <Compile Include="..\..\src\MiniRover.Protocol\BatterySag.cs">
+      <Link>Protocol\BatterySag.cs</Link>
+    </Compile>
     <Compile Include="..\..\src\MiniRover.Protocol\BleSetup.cs">
       <Link>Protocol\BleSetup.cs</Link>
     </Compile>

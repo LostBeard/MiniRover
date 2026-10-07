@@ -307,8 +307,11 @@
             _batteryMessage = "Enter the pack voltage from the multimeter, between 5 and 9.5 V.";
             return;
         }
-        double coef = CarSettings.CalibratedBatteryCoefficient(_s.GetDouble("battery.coef", 3.7), Volts.Value, measured);
-        Send("battery.coef", coef.ToString("0.####", CultureInfo.InvariantCulture));
+        // The car names the multiplier its reading uses: "battery.divider" on calibrated chips, "battery.coef" (fitted
+        // formula) otherwise. Either way the reading is linear in it.
+        string key = _s.Get("info.battery.key", "battery.coef");
+        double coef = CarSettings.CalibratedBatteryCoefficient(_s.GetDouble(key, key == "battery.coef" ? 3.7 : 4.025), Volts.Value, measured);
+        Send(key, coef.ToString("0.####", CultureInfo.InvariantCulture));
         _batteryMessage = $"Sent: the car now reads about {measured:F2} V (a new reading takes a few seconds).";
     }
 

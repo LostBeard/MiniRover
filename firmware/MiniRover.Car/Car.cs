@@ -55,8 +55,10 @@ namespace MiniRover.Car
                 {
                     int sum = 0;
                     for (int i = 0; i < 8; i++) sum += ch.ReadValue();
-                    double volts = sum / 8 / 4095.0 * BatteryService.AdcFullScaleVolts * Settings.BatteryCoefficient;
+                    int pinMv;
+                    double volts = BatteryService.PackVolts(sum / 8, Settings, out pinMv);
                     BootVolts = volts;
+                    System.Diagnostics.Debug.WriteLine(BatteryService.DescribeCalibration());
                     HasBattery = volts >= BatteryService.NoBatteryVolts;
                     System.Diagnostics.Debug.WriteLine("Boot battery " + volts.ToString("F2") + " V" + (HasBattery ? "" : " - USB power only, servos stay off"));
                 }

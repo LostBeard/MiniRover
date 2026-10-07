@@ -30,6 +30,8 @@ namespace MiniRover_Native
 
             static signed int ResetReason(  HRESULT &hr );
 
+            static signed int AdcMillivolts( signed int param0, HRESULT &hr );
+
             static void FullReset(  HRESULT &hr );
 
         };

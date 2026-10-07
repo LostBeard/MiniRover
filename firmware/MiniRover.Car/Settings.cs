@@ -24,6 +24,10 @@ namespace MiniRover.Car
         /// raw-ADC formula uses 3.7). Calibrate against a multimeter (Docs/battery.md).</summary>
         public double BatteryCoefficient { get => GetDouble("battery.coef", 3.7); set => Set("battery.coef", value); }
 
+        /// <summary>Pack volts per CALIBRATED pin volt (the divider ratio), used when the chip has ADC calibration
+        /// data (BatteryService). Calibrate against a multimeter or charger (Docs/battery.md).</summary>
+        public double BatteryDivider { get => GetDouble("battery.divider", BatteryService.DefaultDivider); set => Set("battery.divider", value); }
+
         /// <summary>Global speed limit 0..1 applied to every drive command ("kid mode" below 1).</summary>
         public double SpeedLimit { get => GetDouble("drive.limit", 1.0); set => Set("drive.limit", value); }
 
@@ -116,6 +120,7 @@ namespace MiniRover.Car
                 case "pan.trim": return Num(PanTrim);
                 case "tilt.trim": return Num(TiltTrim);
                 case "battery.coef": return Num(BatteryCoefficient);
+                case "battery.divider": return Num(BatteryDivider);
                 case "drive.limit": return Num(SpeedLimit);
                 case "motor.minduty": return MotorMinimumDuty.ToString();
                 case "led.brightness": return LedBrightness.ToString();
@@ -160,7 +165,7 @@ namespace MiniRover.Car
         /// <summary>Every key a client may change (HTTP, BLE and the app link all go through <see cref="TryApply"/>).</summary>
         public static readonly string[] ClientKeys =
         {
-            "pan.trim", "tilt.trim", "battery.coef", "drive.limit", "motor.minduty", "led.brightness",
+            "pan.trim", "tilt.trim", "battery.coef", "battery.divider", "drive.limit", "motor.minduty", "led.brightness",
             "camera.size", "camera.quality", "camera.fps", "camera.mirror", "camera.flip", "http.api", "led.corners",
             "motor0.invert", "motor1.invert", "motor2.invert", "motor3.invert",
             "motor0.gain", "motor1.gain", "motor2.gain", "motor3.gain",
@@ -205,6 +210,7 @@ namespace MiniRover.Car
                 case "pan.trim": PanTrim = Clamp(v, -30, 30); return true;
                 case "tilt.trim": TiltTrim = Clamp(v, -30, 30); return true;
                 case "battery.coef": BatteryCoefficient = Clamp(v, 2.5, 5.5); return true;
+                case "battery.divider": BatteryDivider = Clamp(v, 3.0, 5.5); return true;
                 case "drive.limit": SpeedLimit = Clamp(v, 0, 1); return true;
                 case "motor.minduty": MotorMinimumDuty = (int)Clamp(v, 0, 4000); return true;
                 case "led.brightness": LedBrightness = (int)Clamp(v, 0, 255); return true;

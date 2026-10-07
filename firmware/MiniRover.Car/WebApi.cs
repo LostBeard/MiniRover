@@ -271,6 +271,9 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
                 sb.Append(",\"battery\":{\"volts\":").Append(b.Volts.ToString("F2"))
                   .Append(",\"lastVolts\":").Append(b.LastVolts.ToString("F2"))
                   .Append(",\"raw\":").Append(b.LastRaw.ToString())
+                  .Append(",\"pinMv\":").Append(b.LastPinMillivolts.ToString())
+                  .Append(",\"compensatedVolts\":").Append(b.CompensatedVolts.ToString("F2"))
+                  .Append(",\"sagPerLoad\":").Append(b.SagPerLoad.ToString("F3")).Append(",\"sagSamples\":").Append(b.SagSamples.ToString())
                   .Append(",\"underLoad\":").Append(B(b.LastSampleUnderLoad))
                   .Append(",\"noBattery\":").Append(B(b.NoBattery))
                   .Append(",\"level\":\"").Append(BatteryLevelNames.Name(b.Level)).Append("\"}");

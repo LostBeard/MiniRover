@@ -57,6 +57,15 @@ namespace MiniRover.Native
         public static extern int ResetReason();
 
         /// <summary>
+        /// An ADC1 reading (12-bit, 12 dB attenuation: how nanoFramework configures its channels) converted to
+        /// millivolts at the pin with the chip's factory calibration (the reference voltage in eFuse, ESP-IDF line
+        /// fitting). The raw counts are non-linear and the plain formula read a nearly empty pack about 0.5 V low.
+        /// -1 when the chip has no calibration data.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern int AdcMillivolts(int raw);
+
+        /// <summary>
         /// Restarts the whole chip, RTC domain included (the RTC watchdog's reset-RTC stage). A crash reset keeps
         /// some state, and the car then found its I2C devices and camera not answering until a reset through the EN
         /// pin; this is the nearest software equivalent. The next boot reports <see cref="ResetOtherWatchdog"/>.

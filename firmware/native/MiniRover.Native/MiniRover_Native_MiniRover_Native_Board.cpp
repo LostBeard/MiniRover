@@ -14,6 +14,8 @@
 #include "lwip/netif.h"
 #include "esp_system.h"
 #include "esp_sleep.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
 #include "rtc_wdt.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -102,6 +104,30 @@ signed int Board::FreeMemory(signed int param0, HRESULT &hr)
         }
     }
     return -1;
+}
+
+// ADC1, 12 dB, 12-bit (nanoFramework's AdcController uses exactly these, sys_dev_adc_native_..._AdcController.cpp).
+// Created on first use and kept: the scheme only holds the eFuse-derived line coefficients.
+static adc_cali_handle_t s_adcCali = NULL;
+static int s_adcCaliState = 0; // 0 not tried, 1 ready, -1 no calibration data on this chip
+
+signed int Board::AdcMillivolts(signed int param0, HRESULT &hr)
+{
+    (void)hr;
+    if (s_adcCaliState == 0)
+    {
+        adc_cali_line_fitting_config_t config = {};
+        config.unit_id = ADC_UNIT_1;
+        config.atten = ADC_ATTEN_DB_12;
+        config.bitwidth = ADC_BITWIDTH_12;
+        s_adcCaliState = adc_cali_create_scheme_line_fitting(&config, &s_adcCali) == ESP_OK ? 1 : -1;
+    }
+    int mv = 0;
+    if (s_adcCaliState < 0 || adc_cali_raw_to_voltage(s_adcCali, param0, &mv) != ESP_OK)
+    {
+        return -1;
+    }
+    return mv;
 }
 
 signed int Board::ResetReason(HRESULT &hr)
