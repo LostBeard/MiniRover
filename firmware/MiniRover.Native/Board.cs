@@ -34,6 +34,8 @@ namespace MiniRover.Native
         public const int NetApDhcpServer = 103;    // 0 init, 1 started, 2 stopped
         public const int NetStaAddress = 104;
         public const int NetWifiMode = 105;        // 0 off, 1 station, 2 access point, 3 both
+        public const int NetWifiPowerSave = 106;   // esp_wifi_get_ps: 0 none, 1 min modem, 2 max modem
+        public const int NetBluetoothController = 107; // esp_bt_controller_get_status: 0 idle (off), 1 initialised, 2 enabled
 
         /// <summary>Native heap numbers in bytes (Mem* ids). Internal RAM is what runs out first on this board.</summary>
         [MethodImpl(MethodImplOptions.InternalCall)]
@@ -64,6 +66,14 @@ namespace MiniRover.Native
         /// </summary>
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern int AdcMillivolts(int raw);
+
+        /// <summary>
+        /// Shuts Bluetooth down completely: the NimBLE host and the controller (nanoFramework's own teardown). The
+        /// ESP32 has one 2.4 GHz radio; while the Bluetooth controller is enabled it shares the radio's time with WiFi.
+        /// Nothing may use BLE afterwards until the next restart. True when Bluetooth is off.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern bool BluetoothOff();
 
         /// <summary>
         /// Restarts the whole chip, RTC domain included (the RTC watchdog's reset-RTC stage). A crash reset keeps

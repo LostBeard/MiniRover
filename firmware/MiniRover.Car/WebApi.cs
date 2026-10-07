@@ -239,7 +239,9 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
                   .Append(",\"apIp\":\"").Append(Ip(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetApAddress)))
                   .Append("\",\"apLwipIp\":\"").Append(Ip(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetApLwipAddress)))
                   .Append("\",\"apDhcpServer\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetApDhcpServer).ToString())
-                  .Append(",\"staIp\":\"").Append(Ip(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetStaAddress))).Append("\"}");
+                  .Append(",\"staIp\":\"").Append(Ip(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetStaAddress)))
+                  .Append("\",\"powerSave\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetWifiPowerSave).ToString())
+                  .Append(",\"btController\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetBluetoothController).ToString()).Append('}');
             }
             catch (Exception ex)
             {

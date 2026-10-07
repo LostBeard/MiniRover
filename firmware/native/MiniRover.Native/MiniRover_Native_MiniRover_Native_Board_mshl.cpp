@@ -81,6 +81,18 @@ HRESULT Library_MiniRover_Native_MiniRover_Native_Board::AdcMillivolts___STATIC_
     NANOCLR_NOCLEANUP();
 }
 
+HRESULT Library_MiniRover_Native_MiniRover_Native_Board::BluetoothOff___STATIC__BOOLEAN( CLR_RT_StackFrame& stack )
+{
+    NANOCLR_HEADER(); hr = S_OK;
+    {
+
+        bool retValue = Board::BluetoothOff(  hr );
+        NANOCLR_CHECK_HRESULT( hr );
+        SetResult_bool( stack, retValue );
+    }
+    NANOCLR_NOCLEANUP();
+}
+
 HRESULT Library_MiniRover_Native_MiniRover_Native_Board::FullReset___STATIC__VOID( CLR_RT_StackFrame& stack )
 {
     NANOCLR_HEADER(); hr = S_OK;

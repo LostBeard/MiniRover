@@ -14,6 +14,7 @@
 #include "lwip/netif.h"
 #include "esp_system.h"
 #include "esp_sleep.h"
+#include "esp_bt.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "rtc_wdt.h"
@@ -102,6 +103,13 @@ signed int Board::FreeMemory(signed int param0, HRESULT &hr)
             wifi_mode_t mode = WIFI_MODE_NULL;
             return esp_wifi_get_mode(&mode) == ESP_OK ? (signed int)mode : -1;
         }
+        case 106:
+        {
+            wifi_ps_type_t ps = WIFI_PS_NONE;
+            return esp_wifi_get_ps(&ps) == ESP_OK ? (signed int)ps : -1;
+        }
+        case 107:
+            return (signed int)esp_bt_controller_get_status();
     }
     return -1;
 }
@@ -128,6 +136,22 @@ signed int Board::AdcMillivolts(signed int param0, HRESULT &hr)
         return -1;
     }
     return mv;
+}
+
+// nanoFramework's BLE module (targets/ESP32/_nanoCLR/nanoFramework.Device.Bluetooth/esp32_nimble.cpp): its teardown
+// stops the NimBLE host and disables + deinitialises the controller (nimble_port_deinit), and clears ble_initialized
+// so the soft-reboot handler does not tear down twice.
+extern void Device_ble_dispose();
+extern bool ble_initialized;
+
+bool Board::BluetoothOff(HRESULT &hr)
+{
+    (void)hr;
+    if (ble_initialized)
+    {
+        Device_ble_dispose();
+    }
+    return esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE;
 }
 
 signed int Board::ResetReason(HRESULT &hr)

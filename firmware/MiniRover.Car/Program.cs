@@ -223,6 +223,17 @@ namespace MiniRover.Car
                 }
                 _ble.Stop();
                 System.Diagnostics.Debug.WriteLine("BLE setup window closed (" + reason + ")");
+                // Bluetooth fully off for the rest of this run (home mode never uses BLE after the window): the ESP32
+                // shares its one radio between WiFi and an enabled Bluetooth controller, even an idle one.
+                try
+                {
+                    bool off = MiniRover.Native.Board.BluetoothOff();
+                    System.Diagnostics.Debug.WriteLine("Bluetooth " + (off ? "off" : "could not be switched off") + ": " + MemoryText());
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("Bluetooth off: " + ex.Message);
+                }
                 DisableModemSleep();
             }
         }
