@@ -327,7 +327,7 @@ public static class DriveTest
         }
     }
 
-    static bool PortFree(int port)
+    internal static bool PortFree(int port)
     {
         try { using var l = new TcpListener(IPAddress.Loopback, port); l.Start(); l.Stop(); return true; }
         catch (SocketException) { return false; }

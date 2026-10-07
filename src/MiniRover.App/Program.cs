@@ -14,6 +14,9 @@ builder.RootComponents.Add<App>();
 builder.RootComponents.AddSharedStyleSheet("css/app.css");
 
 builder.Services.AddWebWorkerService();
+// Offline use (a PWA): the app's own service worker caches every published file. ImportServiceWorkerAssets loads the
+// build's asset list (service-worker-assets.js, from <ServiceWorkerAssetsManifest> in the csproj).
+builder.Services.RegisterServiceWorker<AppServiceWorker>(new ServiceWorkerConfig { ImportServiceWorkerAssets = true });
 builder.Services.AddRazorRenderer();
 builder.Services.AddRazorUI();
 builder.Services.AddSingleton(sp => new HttpClient { BaseAddress = new Uri(JS.AppBaseUri) });

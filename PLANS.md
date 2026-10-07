@@ -30,7 +30,7 @@ Hardware details: [Docs/hardware.md](Docs/hardware.md). System overview: [Docs/a
    - Pairing is a link containing the room key; the room key is also shown on the LED matrix and the serial console.
    - Prebuilt firmware images ship as GitHub Release assets.
    - The browser app is hosted on GitHub Pages.
-7. **Offline / LAN mode:** `MiniRover.Server` serves the app and runs its own tracker + STUN (SpawnDev.RTC.Server).
+7. **Offline:** the app is a PWA (its .NET service worker caches every file; opens with no network). Driving without internet: the car makes its own WiFi (AP play mode, switched from the app over the live link or BLE) and the WebRTC offer/answer travels over BLE (an https page cannot reach the car over plain HTTP: mixed content). Targets are Chrome and Edge (Web Bluetooth, WebGPU); Safari/iOS are not targeted (TJ, 2026-10-06). No separate server.
 8. **One protocol source** is compiled into both the nanoFramework firmware and the .NET client, with cross-runtime parity tests.
 
 ## Repository layout
@@ -48,7 +48,6 @@ src/
   MiniRover.Client/         connection, telemetry, battery model, input mixing (net10.0)
   MiniRover.App/            browser app (.NET WebAssembly)
   MiniRover.Console/        desktop command-line client (SpawnDev.RTC desktop), also the hardware test driver
-  MiniRover.Server/         LAN host: static app + tracker + STUN
 tests/
   MiniRover.Protocol.Tests/ cross-runtime protocol parity
   MiniRover.Client.Tests/   battery model, input mixer, controllers
@@ -141,7 +140,8 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [ ] Browser tests against the published release build
 
 ### Phase 5 - Hosting and releases
-- [ ] `MiniRover.Server` (LAN / offline)
+- [x] Offline app (PWA): web manifest + icons (MiniRover's own eye art), a .NET service worker (SpawnJS.WebWorkers) that caches all 123 published files per build; page loads network-first, files cache-first. `offlinetest`: with the web server gone and every service worker stopped, the app reopens from a cold worker in 2.6 s. Needed SpawnJS.WebWorkers 2.2.2 (released): the .NET worker could not start offline, and ImportServiceWorkerAssets did nothing with the classic bundle
+- [ ] Driving offline: AP play mode on the car (from the app over the live link, or BLE), WebRTC offer/answer over BLE, host-only ICE (check libpeer with Chrome's mDNS host candidates), memory with BLE + session + camera
 - [x] GitHub Pages deployment of the browser app (https://lostbeard.github.io/MiniRover/, verified driving the car)
 - [ ] Firmware images as GitHub Release assets + flashing guide
 

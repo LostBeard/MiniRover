@@ -39,6 +39,12 @@ if (args.Length >= 2 && args[0] == "facetest")
     return await MiniRover.ConsoleApp.FaceTestCommand.RunAsync(args[1], model);
 }
 
+// minirover offlinetest <publish wwwroot> [httpPort] [cdpPort]: the app opens with no server (PWA), no car needed
+if (args.Length >= 2 && args[0] == "offlinetest")
+{
+    return await MiniRover.ConsoleApp.OfflineTest.RunAsync(args[1], args.Length > 2 ? int.Parse(args[2]) : 8643, args.Length > 3 ? int.Parse(args[3]) : 9243);
+}
+
 // minirover drivetest <publish wwwroot> [httpPort] [cdpPort] [screenshotDir] [--reboot COMx] [--loss permille] [--car http://ip] [--quiet]   (THE WHEELS MUST BE OFF THE GROUND; --quiet: no motors, buzzer or 12 LEDs)
 if (args.Length >= 2 && args[0] == "drivetest")
 {

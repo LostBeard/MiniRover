@@ -12,6 +12,8 @@
     <!-- Not a Blazor-runtime app: build the SpawnJS classic bundle (main.classic.js) that index.html loads.
          The BlazorWebAssembly SDK would otherwise switch SpawnJS.WebWorkers to its Blazor boot path. -->
     <SpawnJSWebWorkersBlazor>false</SpawnJSWebWorkersBlazor>
+    <!-- Offline use: the publish writes the list of every published file (with hashes) for the service worker. -->
+    <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,7 +21,7 @@
     <PackageReference Include="SpawnDev.SpawnJS.RazorRenderer" Version="2.2.2" />
     <PackageReference Include="SpawnDev.SpawnJS.RazorUI" Version="2.2.2" />
     <!-- Required in the exe project: its build targets produce main.classic.js. -->
-    <PackageReference Include="SpawnDev.SpawnJS.WebWorkers" Version="2.2.1" />
+    <PackageReference Include="SpawnDev.SpawnJS.WebWorkers" Version="2.2.2" />
     <!-- Face tracking: BlazeFace on the GPU (the model is bundled in wwwroot/models, Apache-2.0, see its NOTICE). -->
     <PackageReference Include="SpawnDev.ILGPU.ML" Version="5.3.3" />
   </ItemGroup>
@@ -29,5 +31,13 @@
     <ProjectReference Include="..\MiniRover.Client\MiniRover.Client.csproj" />
     <ProjectReference Include="..\MiniRover.Video\MiniRover.Video.csproj" />
   </ItemGroup>
+
+  <!-- Offline use: the SDK writes the service worker asset list (above) but only publishes it together with a
+       JavaScript <ServiceWorker> item. This app's service worker is the SpawnJS bundle (.NET), so publish the list
+       ourselves. -->
+  <Target Name="PublishServiceWorkerAssetsManifest" AfterTargets="Publish">
+    <Copy SourceFiles="$(IntermediateOutputPath)service-worker\$(ServiceWorkerAssetsManifest).publish"
+          DestinationFiles="$(PublishDir)wwwroot\$(ServiceWorkerAssetsManifest)" />
+  </Target>
 
 </Project>

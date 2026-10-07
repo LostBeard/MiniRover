@@ -153,16 +153,16 @@ sealed class Cdp : IAsyncDisposable
     readonly CancellationTokenSource _cts = new();
     int _id;
 
-    public static async Task<Cdp> ConnectAsync(int port)
+    public static async Task<Cdp> ConnectAsync(int port, string targetType = "page")
     {
         using var http = new HttpClient();
         string? wsUrl = null;
-        for (int i = 0; i < 60 && wsUrl == null; i++)
+        for (int i = 0; i < (targetType == "page" ? 60 : 6) && wsUrl == null; i++)
         {
             try
             {
                 var targets = JsonNode.Parse(await http.GetStringAsync($"http://127.0.0.1:{port}/json/list"))!.AsArray();
-                wsUrl = targets.FirstOrDefault(t => t!["type"]?.GetValue<string>() == "page")?["webSocketDebuggerUrl"]?.GetValue<string>();
+                wsUrl = targets.FirstOrDefault(t => t!["type"]?.GetValue<string>() == targetType)?["webSocketDebuggerUrl"]?.GetValue<string>();
             }
             catch (HttpRequestException) { }
             if (wsUrl == null) await Task.Delay(500);
@@ -219,7 +219,17 @@ sealed class Cdp : IAsyncDisposable
             }
             else if (msg["method"]?.GetValue<string>() is string method)
             {
-                if (method == "Runtime.consoleAPICalled")
+                if (method == "Log.entryAdded")
+                {
+                    var en = msg["params"]!["entry"]!;
+                    Console.WriteLine($"[log {en["level"]}] {en["text"]} {en["url"]}");
+                }
+                else if (method == "Runtime.exceptionThrown")
+                {
+                    var d = msg["params"]!["exceptionDetails"]!;
+                    Console.WriteLine("[page exception] " + (d["exception"]?["description"]?.ToString() ?? d["text"]?.ToString()));
+                }
+                else if (method == "Runtime.consoleAPICalled")
                 {
                     var args = msg["params"]!["args"]!.AsArray().Select(a => a!["value"]?.ToString() ?? a!["description"]?.ToString() ?? "");
                     Console.WriteLine("[page] " + string.Join(" ", args));
