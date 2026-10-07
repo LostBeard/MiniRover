@@ -17,6 +17,8 @@ namespace MiniRover.Car
         readonly Car _car;
         readonly WifiService _wifi;
         readonly HttpServer _http;
+        string _settingsJson;     // the /status "settings" object for _settingsVersion
+        int _settingsVersion;
 
         /// <summary>The app link (null in setup mode).</summary>
         public RtcLinkService Link;
@@ -47,6 +49,10 @@ namespace MiniRover.Car
                 case "/":
                 case "/status":
                     HttpServer.SendText(c, 200, "application/json", StatusJson());
+                    return;
+                case "/link/times":
+                    // Where the WebRTC task's time went this session (read-only diagnostics, Docs/video.md).
+                    HttpServer.SendText(c, 200, "text/plain", Link != null ? Link.SendTimes() : "no link");
                     return;
                 case "/stop":
                     // Always open: anyone standing next to the car may stop it.
@@ -348,13 +354,22 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
             sb.Append(",\"lastAbnormalReset\":\"").Append(JsonEscape(_car.Settings.LastAbnormalReset)).Append('"');
             sb.Append(",\"i2cRecovery\":\"").Append(JsonEscape(MiniRover.Car.Drivers.SharedI2c.RecoveryNote)).Append('"');
             // Every client setting, as the strings the app link reports (Settings.ValueOf), so tools can compare.
-            sb.Append(",\"settings\":{");
-            for (int i = 0; i < Settings.ClientKeys.Length; i++)
+            // Built only when a setting changed: formatting every value took ~170 ms of the car's interpreter per
+            // request (measured), and tests poll /status while video streams.
+            int version = s.Version;
+            if (_settingsJson == null || version != _settingsVersion)
             {
-                string key = Settings.ClientKeys[i];
-                sb.Append(i == 0 ? "\"" : ",\"").Append(key).Append("\":\"").Append(s.ValueOf(key)).Append('"');
+                var sj = new StringBuilder(",\"settings\":{");
+                for (int i = 0; i < Settings.ClientKeys.Length; i++)
+                {
+                    string key = Settings.ClientKeys[i];
+                    sj.Append(i == 0 ? "\"" : ",\"").Append(key).Append("\":\"").Append(s.ValueOf(key)).Append('"');
+                }
+                sj.Append('}');
+                _settingsJson = sj.ToString();
+                _settingsVersion = version;
             }
-            sb.Append('}');
+            sb.Append(_settingsJson);
             sb.Append('}');
             return sb.ToString();
         }
@@ -418,3 +433,4 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
         }
     }
 }
+

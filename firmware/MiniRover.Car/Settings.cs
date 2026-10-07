@@ -15,6 +15,9 @@ namespace MiniRover.Car
         const string FilePath = "I:\\minirover.cfg";
 
         readonly Hashtable _values = new Hashtable();
+
+        /// <summary>Changes on every Set: lets callers cache anything built from the settings (the /status JSON).</summary>
+        public int Version { get; private set; }
         readonly object _lock = new object();
 
         public double PanTrim { get => GetDouble("pan.trim", 0); set => Set("pan.trim", value); }
@@ -78,9 +81,10 @@ namespace MiniRover.Car
         {
             "", "brightness", "contrast", "saturation", "sharpness", "denoise", "gainceiling", "awb", "awbgain", "wbmode",
             "agc", "agcgain", "aec", "aec2", "aelevel", "aecvalue", "bpc", "wpc", "rawgamma", "lenc", "dcw", "effect",
+            "xclk",
         };
-        static readonly int[] s_sensorMin = { 0, -2, -2, -2, -2, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, 0, 0, 0, 0, 0, 0, 0 };
-        static readonly int[] s_sensorMax = { 0, 2, 2, 2, 2, 8, 6, 1, 1, 4, 1, 30, 1, 1, 2, 1200, 1, 1, 1, 1, 1, 6 };
+        static readonly int[] s_sensorMin = { 0, -2, -2, -2, -2, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, 0, 0, 0, 0, 0, 0, 0, 8 };
+        static readonly int[] s_sensorMax = { 0, 2, 2, 2, 2, 8, 6, 1, 1, 4, 1, 30, 1, 1, 2, 1200, 1, 1, 1, 1, 1, 6, 24 };
 
         /// <summary>The Camera.Ctrl* id of a "sensor.&lt;name&gt;" key, or 0.</summary>
         public static int SensorControlId(string key)
@@ -298,6 +302,7 @@ namespace MiniRover.Car
             lock (_lock)
             {
                 _values[key] = value ?? "";
+                Version++;
             }
         }
 
@@ -317,6 +322,7 @@ namespace MiniRover.Car
             lock (_lock)
             {
                 _values[key] = value.ToString();
+                Version++;
             }
         }
     }

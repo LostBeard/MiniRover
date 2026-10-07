@@ -79,7 +79,13 @@ namespace MiniRover.Native
         public const int CtrlLensCorrection = 19; // 0/1
         public const int CtrlDownsize = 20;      // 0/1 DCW
         public const int CtrlSpecialEffect = 21; // 0..6
-        public const int ControlCount = 22;
+        /// <summary>
+        /// The camera's clock (XCLK) in MHz, 8..24, default 24. The board's camera clock jams its own WiFi: at
+        /// esp32-camera's usual 20 MHz the car sent 1-4 Mbit/s with packet loss, at 24 MHz 8-13 Mbit/s and none
+        /// (measured, Docs/video.md). Sets the sensor's frame timing too: a slower clock means fewer frames.
+        /// </summary>
+        public const int CtrlXclkMhz = 22;
+        public const int ControlCount = 23;
 
         /// <summary>
         /// Sets one sensor control (Ctrl*). Remembered natively and applied again whenever the driver restarts (a size

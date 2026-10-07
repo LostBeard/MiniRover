@@ -4,6 +4,9 @@
 
 ## Before you start
 
+- The firmware needs an **ESP32 chip revision 3 or later** (every recent FNK0053 kit). Check with
+  `esptool --chip esp32 --port COM8 chip-id`: it prints e.g. "ESP32-D0WD-V3 (revision v3.1)".
+
 - Connect the car's ESP32 board to your PC with a micro-USB **data** cable. A new COM port appears ("USB-SERIAL CH340"). If it does not, install the CH340 driver (Freenove includes it in their repository under `CH340/`).
 - **If the board is in the car, put charged batteries in and turn the power switch on.** On USB power alone, anything that drives the servos (including Freenove's own factory sketch) pulls the supply down and the ESP32 resets over and over: the lights blink and the servos click. MiniRover's firmware avoids this by keeping the servos off until it detects a battery, but other firmware may not.
 

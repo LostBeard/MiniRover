@@ -32,6 +32,7 @@ namespace MiniRover.Car
         readonly byte[] _frame = new byte[Gpio32.LedCount * 3];
         readonly byte[] _sent = new byte[Gpio32.LedCount * 3];
         readonly object _lock = new object();
+        readonly AutoResetEvent _changed = new AutoResetEvent(false);
 
         int _mode = ModeOff; // off by default: lit LEDs drain the batteries for nothing (the eyes show the car is on)
         byte _r = 40, _g = 40, _b = 40;
@@ -64,6 +65,7 @@ namespace MiniRover.Car
                 _b = b;
                 _param = param;
             }
+            _changed.Set(); // a still pattern may be sleeping long: show the new one now
         }
 
         void Run()
@@ -87,7 +89,10 @@ namespace MiniRover.Car
                 {
                     System.Diagnostics.Debug.WriteLine("Lights: " + ex.Message);
                 }
-                Thread.Sleep(50);
+                // Off and solid never change by themselves: no need to render 20 times a second (the car's interpreter
+                // is the busiest thing on it while video streams). Set() wakes this at once.
+                int mode = _mode;
+                _changed.WaitOne(mode == ModeOff || mode == ModeSolid ? 1000 : 50, false);
             }
         }
 

@@ -183,10 +183,31 @@ namespace MiniRover.Car
                     Send(CarLink.EncodeTelemetry(BuildTelemetry()));
                     TelemetrySent++;
                 }
-                Thread.Sleep(10);
+                // 20 ms: the app sends drive commands 20 times a second, so a command waits 10 ms longer at most. At 10 ms
+                // this loop alone took about a third of a core of the car's interpreter while video streamed (measured),
+                // CPU the native video sender needs.
+                Thread.Sleep(20);
             }
             Status = replaced ? "replaced by a new session from the app" : "disconnected";
+            System.Diagnostics.Debug.WriteLine("Link: " + Status + ", " + SendTimes());
         }
+
+        /// <summary>Where the WebRTC pump's time went this session: video frame send and connection loop, average / max ms.</summary>
+        public string SendTimes()
+        {
+            if (_handle < 0) return "no session";
+            return "frames sent " + PeerConnection.GetStat(_handle, PeerConnection.StatFramesSent)
+                + " dropped " + PeerConnection.GetStat(_handle, PeerConnection.StatFramesDropped)
+                + ", frame send " + Ms(PeerConnection.StatFrameSendMicroseconds) + " (max " + Ms(PeerConnection.StatFrameSendMaxMicroseconds)
+                + ") ms, loop " + Ms(PeerConnection.StatLoopMicroseconds) + " (max " + Ms(PeerConnection.StatLoopMaxMicroseconds)
+                + ") ms, UDP retries " + PeerConnection.GetStat(-1, PeerConnection.StatUdpSendRetries)
+                + " errors " + PeerConnection.GetStat(-1, PeerConnection.StatUdpSendErrors)
+                + ", per datagram: DTLS write " + PeerConnection.GetStat(-1, PeerConnection.StatDtlsWriteMicroseconds)
+                + " us, sendto " + PeerConnection.GetStat(-1, PeerConnection.StatUdpSendMicroseconds)
+                + " us, cipher 0x" + PeerConnection.GetStat(_handle, PeerConnection.StatDtlsCipherSuite).ToString("X4");
+        }
+
+        string Ms(int stat) => (PeerConnection.GetStat(_handle, stat) / 1000.0).ToString("F1");
 
         /// <summary>Play mode: waits for a paired app to ask over BLE, then sends a host-only offer and waits for the
         /// answer. Null when nobody asked (the caller loops).</summary>

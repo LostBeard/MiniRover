@@ -20,7 +20,10 @@ The `MINIROVER_ESP32` target fixes this and prepares the board for WebRTC:
 - the camera: esp32-camera + esp_jpeg (vendored in `firmware/native/components`, see the README there) and MiniRover's own interop assembly `MiniRover.Native` (`firmware/native/MiniRover.Native`: camera task, WiFi signal and power save, memory numbers);
 - BLE (NimBLE) for setup from the web app;
 - a memory budget that lets WebRTC, BLE and the camera run together: 1 MB of PSRAM reserved for native code, NimBLE and mid-size allocations in PSRAM, FreeRTOS functions in flash to make IRAM room for the camera's interrupt code (each measured, see the comments in the target's `sdkconfig.default_minirover.esp32`);
-- based on `ESP32_PSRAM_REV0`, so it runs on every ESP32 chip revision a kit might have.
+- speed: built for **ESP32 chip revision 3 and later** (no PSRAM cache workaround), compiled with `-O2`, PSRAM at
+  80 MHz, ChaCha20-Poly1305 for WebRTC encryption. Video went from 12 to 20 fps at 320x240 with these (see
+  [video.md](video.md)). Freenove's WROVER-E kits are revision 3; an older board with a WROVER-B module (revision 1)
+  will not boot this image. `esptool chip-id` prints the revision ("revision v3.1").
 
 ### Changing an interop assembly
 

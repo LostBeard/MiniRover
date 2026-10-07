@@ -26,6 +26,9 @@ namespace MiniRover.Car
         readonly Random _rng = new Random();
         readonly byte[] _sent = new byte[EyeArt.FrameBytes];
         bool _sentValid;
+        byte[] _lastFrame;           // what Render returned last pass (already shown, or equal to what was)
+        byte[] _aliveFrame;          // the drawn "alive" eyes for _aliveKey
+        int _aliveKey = -1;
 
         int _mode = CarLink.FaceAlive;
         int _arg;
@@ -105,12 +108,14 @@ namespace MiniRover.Car
                 try
                 {
                     byte[] frame = Render(Environment.TickCount64);
-                    if (!_sentValid || !Same(frame, _sent))
+                    // The same array as last time is the same picture (cached frames, a custom frame): skip the compare.
+                    if (!_sentValid || (frame != _lastFrame && !Same(frame, _sent)))
                     {
                         _matrix.Show(frame);
                         Array.Copy(frame, _sent, EyeArt.FrameBytes);
                         _sentValid = true;
                     }
+                    _lastFrame = frame;
                 }
                 catch (Exception ex)
                 {
@@ -209,7 +214,15 @@ namespace MiniRover.Car
                 // Every few seconds, now and then a double blink.
                 _nextBlink = _rng.Next(6) == 0 ? now + 350 : now + 2500 + _rng.Next(4000);
             }
-            return EyeArt.Alive(lookX, lookY, now < _blinkUntil);
+            // The picture changes a few times a second at most, but this runs 25 times: draw only on a change. On the
+            // car's interpreter drawing every frame cost about 9% of a core (measured with FreeRTOS run-time stats).
+            int key = (lookX + 8) | ((lookY + 8) << 4) | (now < _blinkUntil ? 1 << 8 : 0);
+            if (key != _aliveKey || _aliveFrame == null)
+            {
+                _aliveFrame = EyeArt.Alive(lookX, lookY, now < _blinkUntil);
+                _aliveKey = key;
+            }
+            return _aliveFrame;
         }
     }
 }

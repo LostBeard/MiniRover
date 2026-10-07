@@ -55,6 +55,10 @@ static volatile int s_quality = 12;         // 0..63 sensor scale (lower = bette
 static volatile int s_sensor = 0;
 static framesize_t s_size = FRAMESIZE_QVGA;   // the size the driver was initialised for (its buffers fit this)
 static bool s_hmirror = false, s_vflip = false;
+// The camera clock (Camera.CtrlXclkMhz). Not esp32-camera's usual 20 MHz: on this board that clock jammed the car's
+// own WiFi (UDP from the car 1-4 Mbit/s with 2-6% loss, against 13 Mbit/s with the camera off and 8-13 Mbit/s at
+// 24 MHz, measured 2026-10-07 at -24 dBm). 24 MHz is within both sensors' range and keeps the OV2640's frame rate.
+static int s_xclkMhz = 24;
 
 // Held by the capture task around each frame, and by Configure while it re-initialises the driver: the driver is
 // never torn down under a frame in flight. (Changing the size with set_framesize while streaming hung the car.)
@@ -194,7 +198,7 @@ static esp_err_t cam_start(pixformat_t format, framesize_t size, int quality)
     c.pin_vsync = CAM_PIN_VSYNC;
     c.pin_href = CAM_PIN_HREF;
     c.pin_pclk = CAM_PIN_PCLK;
-    c.xclk_freq_hz = 20000000;
+    c.xclk_freq_hz = s_xclkMhz * 1000000;
     c.ledc_timer = LEDC_TIMER_3;
     c.ledc_channel = LEDC_CHANNEL_7;
     c.pixel_format = format;
@@ -347,7 +351,7 @@ signed int Camera::GetStat(signed int param0, HRESULT &hr)
 
 // ---- sensor controls (Camera.Ctrl*) ----
 
-#define CAM_CTRL_COUNT 22
+#define CAM_CTRL_COUNT 23
 static int s_ctrlValue[CAM_CTRL_COUNT];
 static bool s_ctrlSet[CAM_CTRL_COUNT];
 
@@ -381,6 +385,11 @@ static int cam_apply_control(sensor_t *s, int id, int v)
         case 19: fn = s->set_lenc; break;
         case 20: fn = s->set_dcw; break;
         case 21: fn = s->set_special_effect; break;
+        case 22:
+            // Takes effect at once (the LEDC timer) and at every driver restart (cam_start reads s_xclkMhz).
+            if (v < 8 || v > 24 || s->set_xclk == NULL) return -1;
+            s_xclkMhz = v;
+            return s->set_xclk(s, LEDC_TIMER_3, v) == 0 ? 0 : -1;
         default: return -1;
     }
     if (fn == NULL) return -1;
@@ -403,6 +412,7 @@ signed int Camera::SetControl(signed int param0, signed int param1, HRESULT &hr)
     if (param0 <= 0 || param0 >= CAM_CTRL_COUNT) return -1;
     s_ctrlValue[param0] = param1;
     s_ctrlSet[param0] = true;
+    if (param0 == 22 && param1 >= 8 && param1 <= 24) s_xclkMhz = param1; // the clock the driver starts with
     if (!s_ready) return 0; // applied when the camera starts
     return cam_apply_control(esp_camera_sensor_get(), param0, param1);
 }
@@ -436,6 +446,7 @@ signed int Camera::GetControl(signed int param0, HRESULT &hr)
         case 19: return st.lenc;
         case 20: return st.dcw;
         case 21: return st.special_effect;
+        case 22: return (int)(s->xclk_freq_hz / 1000000);
         default: return INT32_MIN;
     }
 }

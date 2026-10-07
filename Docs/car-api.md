@@ -36,6 +36,7 @@ Then:
 | `/settings` | any of the keys below, e.g. `/settings?camera.fps=10` |
 | `/wifi/setup` | forget the network and restart in setup mode |
 | `/reboot` | |
+| `/link/times` | (always open, read-only) the WebRTC session's send timings, see [video.md](video.md) |
 | `/udptest` | `ip`, `port`, `ms` (max 30000): WiFi throughput test. The car sends 1200-byte UDP datagrams to `ip:port` as fast as its WiFi takes them; `/status` `net.udpTest` shows progress. `minirover udptest http://<car>` runs it and prints the rate and losses |
 
 Turn it off again with `http.api=0`.
@@ -56,6 +57,7 @@ Changed through `/settings` (HTTP), the BLE setup service, or the app link. Valu
 | `camera.size` | 6 | esp32-camera frame size: 1 = 160x120, 6 = 320x240, 8 = 400x296, 9 = 480x320, 10 = 640x480, 11 = 800x600 (OV2640 only) |
 | `camera.quality` | 12 | JPEG quality 8..63, lower is better and bigger |
 | `camera.fps` | 15 | 1..30 |
+| `sensor.xclk` | 24 | camera clock in MHz, 8..24. The usual 20 MHz jams the car's own WiFi (see [video.md](video.md)) |
 | `camera.flip`, `camera.mirror` | 1, 1 | the head holds the sensor upside down; both 1 = upright (see [hardware.md](hardware.md)) |
 | `http.api` | 0 | 1 turns on the HTTP test API above |
 | `led.corners` | `------------` | which corner each of the 12 LEDs is on (0 front left, 1 front right, 2 rear left, 3 rear right, - unknown); set by the app's light calibration |
