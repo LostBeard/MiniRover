@@ -36,6 +36,15 @@ namespace MiniRover.Native
         public const int NetWifiMode = 105;        // 0 off, 1 station, 2 access point, 3 both
         public const int NetWifiPowerSave = 106;   // esp_wifi_get_ps: 0 none, 1 min modem, 2 max modem
         public const int NetBluetoothController = 107; // esp_bt_controller_get_status: 0 idle (off), 1 initialised, 2 enabled
+        public const int NetUdpTestBytes = 108;    // UdpTest: bytes handed to the network so far
+        public const int NetUdpTestFull = 109;     // UdpTest: sends refused because the WiFi / lwIP buffers were full
+        public const int NetUdpTestRunning = 110;  // UdpTest: 1 while the test task runs
+        public const int NetStaChannel = 111;      // the joined access point's primary channel
+        public const int NetStaSecondChannel = 112; // 0 none (20 MHz), 1 above, 2 below (40 MHz)
+        public const int NetStaApPhy = 113;        // the AP's PHY modes, bits: 0 11b, 1 11g, 2 11n, 3 LR, 4 11a, 5 11ac, 6 11ax
+        public const int NetStaPhyMode = 114;      // negotiated wifi_phy_mode_t: 0 LR, 1 11b, 2 11g, 3 11a, 4 HT20, 5 HT40, 6 HE20
+        public const int NetStaBandwidth = 115;    // 1 HT20, 2 HT40
+        public const int NetStaProtocols = 116;    // the station's own protocol bitmap (1 b, 2 g, 4 n, 8 LR)
 
         /// <summary>Native heap numbers in bytes (Mem* ids). Internal RAM is what runs out first on this board.</summary>
         [MethodImpl(MethodImplOptions.InternalCall)]
@@ -74,6 +83,14 @@ namespace MiniRover.Native
         /// </summary>
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern bool BluetoothOff();
+
+        /// <summary>
+        /// WiFi throughput test without WebRTC: a native task sends 1200-byte UDP datagrams to <paramref name="ipv4"/>
+        /// : <paramref name="port"/> as fast as the network takes them for <paramref name="durationMs"/> (at most 30 s).
+        /// Progress in FreeMemory(NetUdpTest*). False if a test is already running or the address is invalid.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern bool UdpTest(string ipv4, int port, int durationMs);
 
         /// <summary>
         /// Restarts the whole chip, RTC domain included (the RTC watchdog's reset-RTC stage). A crash reset keeps

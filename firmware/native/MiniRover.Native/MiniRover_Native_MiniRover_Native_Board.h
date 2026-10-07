@@ -34,6 +34,8 @@ namespace MiniRover_Native
 
             static bool BluetoothOff(  HRESULT &hr );
 
+            static bool UdpTest( const char* param0, signed int param1, signed int param2, HRESULT &hr );
+
             static void FullReset(  HRESULT &hr );
 
         };

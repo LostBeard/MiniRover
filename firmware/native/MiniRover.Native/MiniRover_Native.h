@@ -21,6 +21,7 @@ struct Library_MiniRover_Native_MiniRover_Native_Board
     NANOCLR_NATIVE_DECLARE(ResetReason___STATIC__I4);
     NANOCLR_NATIVE_DECLARE(AdcMillivolts___STATIC__I4__I4);
     NANOCLR_NATIVE_DECLARE(BluetoothOff___STATIC__BOOLEAN);
+    NANOCLR_NATIVE_DECLARE(UdpTest___STATIC__BOOLEAN__STRING__I4__I4);
     NANOCLR_NATIVE_DECLARE(FullReset___STATIC__VOID);
 
     //--//

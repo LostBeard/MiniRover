@@ -93,6 +93,27 @@ HRESULT Library_MiniRover_Native_MiniRover_Native_Board::BluetoothOff___STATIC__
     NANOCLR_NOCLEANUP();
 }
 
+HRESULT Library_MiniRover_Native_MiniRover_Native_Board::UdpTest___STATIC__BOOLEAN__STRING__I4__I4( CLR_RT_StackFrame& stack )
+{
+    NANOCLR_HEADER(); hr = S_OK;
+    {
+
+        const char* param0;
+        NANOCLR_CHECK_HRESULT( Interop_Marshal_LPCSTR( stack, 0, param0 ) );
+
+        signed int param1;
+        NANOCLR_CHECK_HRESULT( Interop_Marshal_INT32( stack, 1, param1 ) );
+
+        signed int param2;
+        NANOCLR_CHECK_HRESULT( Interop_Marshal_INT32( stack, 2, param2 ) );
+
+        bool retValue = Board::UdpTest( param0, param1, param2, hr );
+        NANOCLR_CHECK_HRESULT( hr );
+        SetResult_bool( stack, retValue );
+    }
+    NANOCLR_NOCLEANUP();
+}
+
 HRESULT Library_MiniRover_Native_MiniRover_Native_Board::FullReset___STATIC__VOID( CLR_RT_StackFrame& stack )
 {
     NANOCLR_HEADER(); hr = S_OK;

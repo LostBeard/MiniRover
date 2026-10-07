@@ -66,6 +66,11 @@ namespace MiniRover.Car
 
             switch (r.Path)
             {
+                case "/udptest":
+                    // WiFi throughput without WebRTC: plain UDP to ip:port for ms; progress in /status net.udpTest.
+                    bool started = MiniRover.Native.Board.UdpTest(r.Get("ip", ""), (int)r.GetDouble("port", 0), (int)r.GetDouble("ms", 5000));
+                    HttpServer.SendText(c, started ? 200 : 409, "text/plain", started ? "started" : "not started");
+                    return;
                 case "/servo/center":
                     Need(_car.Servos, "servos");
                     _car.Servos.CenterBoth();
@@ -241,7 +246,16 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
                   .Append("\",\"apDhcpServer\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetApDhcpServer).ToString())
                   .Append(",\"staIp\":\"").Append(Ip(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetStaAddress)))
                   .Append("\",\"powerSave\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetWifiPowerSave).ToString())
-                  .Append(",\"btController\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetBluetoothController).ToString()).Append('}');
+                  .Append(",\"btController\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetBluetoothController).ToString())
+                  .Append(",\"udpTest\":{\"bytes\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetUdpTestBytes).ToString())
+                  .Append(",\"full\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetUdpTestFull).ToString())
+                  .Append(",\"running\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetUdpTestRunning).ToString()).Append('}')
+                  .Append(",\"channel\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetStaChannel).ToString())
+                  .Append(",\"secondChannel\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetStaSecondChannel).ToString())
+                  .Append(",\"apPhy\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetStaApPhy).ToString())
+                  .Append(",\"phyMode\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetStaPhyMode).ToString())
+                  .Append(",\"bandwidth\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetStaBandwidth).ToString())
+                  .Append(",\"protocols\":").Append(MiniRover.Native.Board.FreeMemory(MiniRover.Native.Board.NetStaProtocols).ToString()).Append('}');
             }
             catch (Exception ex)
             {

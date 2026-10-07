@@ -43,6 +43,10 @@ if (args.Length >= 2 && args[0] == "playmode")
     return 0;
 }
 
+// minirover udptest <car http url> [seconds]   WiFi throughput car -> this PC without WebRTC: the car sends plain UDP
+// (needs http.api=1 on the car); prints the received rate and losses. Compare with the video stream's rate.
+if (args.Length >= 2 && args[0] == "udptest") return await UdpTestCommand.RunAsync(args[1], args.Length > 2 ? int.Parse(args[2]) : 10);
+
 // minirover reboot <COMx>   restart the car's program (CLR) over USB, as if it had restarted
 if (args.Length >= 2 && args[0] == "reboot")
 {
