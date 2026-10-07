@@ -140,7 +140,7 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 - [ ] Browser tests against the published release build
 
 ### Phase 5 - Hosting and releases
-- [x] Offline app (PWA): web manifest + icons (MiniRover's own eye art), a .NET service worker (SpawnJS.WebWorkers) that caches all 123 published files per build; page loads network-first, files cache-first. `offlinetest`: with the web server gone and every service worker stopped, the app reopens from a cold worker in 2.6 s. Needed SpawnJS.WebWorkers 2.2.2 (released): the .NET worker could not start offline, and ImportServiceWorkerAssets did nothing with the classic bundle
+- [x] Offline app (PWA): web manifest + icons (MiniRover's own eye art), a .NET service worker (SpawnJS.WebWorkers) that caches all 123 published files per build; page loads network-first, files cache-first. `offlinetest`: with the web server gone and every service worker stopped, the app reopens from a cold worker in 2.6 s. Needed SpawnJS.WebWorkers 2.2.2 (released): the .NET worker could not start offline, and ImportServiceWorkerAssets did nothing with the classic bundle The hosted app (GitHub Pages) passes too: after one online visit it reopened in 0.96 s with lostbeard.github.io unreachable (`offlinetest https://lostbeard.github.io/MiniRover/`)
 - [ ] Driving offline: AP play mode on the car (from the app over the live link, or BLE), WebRTC offer/answer over BLE, host-only ICE (check libpeer with Chrome's mDNS host candidates), memory with BLE + session + camera
 - [x] GitHub Pages deployment of the browser app (https://lostbeard.github.io/MiniRover/, verified driving the car)
 - [ ] Firmware images as GitHub Release assets + flashing guide
