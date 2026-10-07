@@ -36,6 +36,7 @@ Then:
 | `/settings` | any of the keys below, e.g. `/settings?camera.fps=10` |
 | `/wifi/setup` | forget the network and restart in setup mode |
 | `/reboot` | |
+| `/udptest` | `ip`, `port`, `ms` (max 30000): WiFi throughput test. The car sends 1200-byte UDP datagrams to `ip:port` as fast as its WiFi takes them; `/status` `net.udpTest` shows progress. `minirover udptest http://<car>` runs it and prints the rate and losses |
 
 Turn it off again with `http.api=0`.
 
