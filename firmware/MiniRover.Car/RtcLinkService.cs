@@ -130,7 +130,10 @@ namespace MiniRover.Car
                 int st = PeerConnection.GetState(_handle);
                 if (st == PeerConnection.StateFailed || st == PeerConnection.StateClosed || Environment.TickCount64 > deadline)
                 {
-                    throw new Exception("WebRTC connect failed (state " + st + ")");
+                    // The ICE path at the moment of failure (state 3 = ICE up, DTLS not done) and the send-side counters.
+                    RecordIce(Environment.TickCount64 - answeredAt);
+                    throw new Exception("WebRTC connect failed (state " + st + "; " + LastIce + "; udp send errors "
+                        + PeerConnection.GetStat(-1, PeerConnection.StatUdpSendErrors) + ")");
                 }
                 Thread.Sleep(50);
             }
@@ -268,6 +271,10 @@ namespace MiniRover.Car
                 + ", learned " + PeerConnection.GetStat(_handle, PeerConnection.StatIcePrflxLearned)
                 + ", pairs " + PeerConnection.GetStat(_handle, PeerConnection.StatIceCandidatePairs)
                 + ", local " + PeerConnection.GetStat(_handle, PeerConnection.StatIceLocalCandidates)
+                + ", DTLS sent " + PeerConnection.GetStat(_handle, PeerConnection.StatDtlsHandshakeSent)
+                + " received " + PeerConnection.GetStat(_handle, PeerConnection.StatDtlsHandshakeReceived)
+                + " state " + PeerConnection.GetStat(_handle, PeerConnection.StatDtlsState)
+                + ", SCTP handshake resends " + PeerConnection.GetStat(_handle, PeerConnection.StatSctpHandshakeRetransmits)
                 + ", " + connectMs + " ms";
         }
 
