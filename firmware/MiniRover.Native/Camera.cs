@@ -55,5 +55,40 @@ namespace MiniRover.Native
 
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern int GetStat(int stat);
+
+        // Sensor controls (esp32-camera sensor_t set_* functions; ranges as esp32-camera documents them).
+        public const int CtrlBrightness = 1;     // -2..2
+        public const int CtrlContrast = 2;       // -2..2
+        public const int CtrlSaturation = 3;     // -2..2
+        public const int CtrlSharpness = 4;      // -2..2 (not every sensor)
+        public const int CtrlDenoise = 5;        // sensor-specific level (not every sensor)
+        public const int CtrlGainCeiling = 6;    // 0..6 = 2x, 4x, 8x, 16x, 32x, 64x, 128x
+        public const int CtrlWhiteBalance = 7;   // 0/1 automatic white balance
+        public const int CtrlAwbGain = 8;        // 0/1
+        public const int CtrlWbMode = 9;         // 0 auto, 1 sunny, 2 cloudy, 3 office, 4 home
+        public const int CtrlAutoGain = 10;      // 0/1 (AGC)
+        public const int CtrlAgcGain = 11;       // 0..30 manual gain (AGC off)
+        public const int CtrlAutoExposure = 12;  // 0/1 (AEC)
+        public const int CtrlAec2 = 13;          // 0/1 DSP exposure (longer exposures in the dark: brighter, fewer fps)
+        public const int CtrlAeLevel = 14;       // -2..2 exposure target
+        public const int CtrlAecValue = 15;      // 0..1200 manual exposure (AEC off)
+        public const int CtrlBadPixel = 16;      // 0/1 black pixel correction
+        public const int CtrlWhitePixel = 17;    // 0/1 white pixel correction
+        public const int CtrlRawGamma = 18;      // 0/1
+        public const int CtrlLensCorrection = 19; // 0/1
+        public const int CtrlDownsize = 20;      // 0/1 DCW
+        public const int CtrlSpecialEffect = 21; // 0..6
+        public const int ControlCount = 22;
+
+        /// <summary>
+        /// Sets one sensor control (Ctrl*). Remembered natively and applied again whenever the driver restarts (a size
+        /// change re-initialises it). Returns 0, or -1 when the sensor has no such control or refused the value.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern int SetControl(int control, int value);
+
+        /// <summary>The sensor's current value of a control (from its status), or int.MinValue when unknown.</summary>
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern int GetControl(int control);
     }
 }

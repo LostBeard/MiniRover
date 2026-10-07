@@ -76,7 +76,7 @@ tests/
 - [ ] SpawnWear rebuilt and verified on the shared library (Riker's call)
 - [x] libpeer: read every waiting datagram per pass (bounded burst): a SipSorcery peer's ICE consent checks were starved behind per-packet SACKs during video and the desktop dropped the car after 8 s
 - [x] SpawnDev.SIPSorcery fork (SpawnDev.RTC): FORWARD TSN receive support + advertised in INIT, and an INIT parameter-parsing bug fixed. Desktop <-> car with video and 5% injected loss: 40 s, telemetry continuous (was: dropped after 16-24 s). 5-minute session at 0% loss: 14.6 fps, longest telemetry gap 318 ms
-- [ ] Release SpawnDev.SIPSorcery + SpawnDev.RTC with the FORWARD TSN fix (nuget.org needs TJ's go); MiniRover's desktop console uses a local 10.0.10-local.1 build until then
+- [x] Released SpawnDev.SIPSorcery 10.0.10 + SpawnDev.RTC 2.3.1 with the FORWARD TSN fix (2026-10-06; RTC PlaywrightMultiTest 335/0/3); RazorRenderer + RazorUI 2.2.2 with the lost-click fix
 
 ### Phase 1 - Car bring-up
 Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over the kit's CH340C (overruns at 921600 baud, see Docs/firmware-build.md), so Phase 1 runs on the MiniRover firmware target (460800 baud + CRC32), which pulls part of Phase 2 forward.
@@ -147,7 +147,9 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
 
 ### Phase 6 - Machine-learning modes
 - [x] Optional picture clean-up on the GPU (SpawnDev.ILGPU, TJ 2026-10-06), per car in Settings, off by default: decoded bitmap -> GPU buffer (ExternalImageCopier) -> MiniRover.Video kernels -> WebGPU canvas, never through .NET. Stages: JPEG deblocking, edge-preserving spatial + motion-adaptive temporal denoise, grey-world white balance measured on mid-tones and faded out in the shadows (the camera's shadows are neutral while its mid-tones are yellow under room light), auto levels + a pow-free shadow lift, unsharp mask, top-row fix. Measured on car frames (`videofx`, QVGA): brightness 44.6 -> 83.7, relative noise 5.5% -> 2.7%, block grid 2.30 -> 1.52. In Chrome on the car: 14.8 fps (same as plain), 6.2 ms per frame on the GPU
-- [ ] Picture clean-up next: upscaling for full screen; the OV2640's own white balance / exposure / gain settings (sensor-side may beat post-processing for noise); feed the cleaned frames to the ML modes
+- [x] Camera sensor controls (Camera.SetControl/GetControl, `sensor.*` settings, live values in /status and the settings message; no app controls yet): gain ceiling defaults to 8x instead of the driver's 2x. Measured on the car (QVGA, room light): mean luma 31.5 -> 66.4, relative noise 5.97% -> 5.45%, JPEG block grid 2.98 -> 2.28; 32x adds little brightness and visibly more colour noise; exposure target / night mode / bad-pixel correction changed nothing measurable in this light
+- [x] Picture clean-up: Catmull-Rom upscaling to the shown size (684x513 in the test window, 12 ms per frame on the GPU); shadow colour fades with the noise reduction (colour noise 7.8 -> 4.3 levels); 9 kernel tests on ILGPU's CPU accelerator (red-checked)
+- [ ] Picture: the sensor's horizontal line noise at higher gain (a row-offset filter); feed the cleaned frames to the ML modes
 - [ ] Face tracking: face detection -> camera pan/tilt controller (servos only, wheels stay still)
 - [ ] Follow me: pose or person detection -> steering + distance keeping, sonar stop
 - [ ] Follow an object: pick a detected class (ball, pet, ...)

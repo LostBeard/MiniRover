@@ -32,6 +32,10 @@ namespace MiniRover_Native
 
             static signed int GetStat( signed int param0, HRESULT &hr );
 
+            static signed int SetControl( signed int param0, signed int param1, HRESULT &hr );
+
+            static signed int GetControl( signed int param0, HRESULT &hr );
+
         };
     }
 }

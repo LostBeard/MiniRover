@@ -202,13 +202,14 @@ public static class DriveTest
                 await Task.Delay(4000);
                 int fx1 = int.Parse(Attr("data-frames"));
                 string fxMs = Attr("data-fx-ms");
+                string fxSize = Attr("data-fx-size");
                 bool problem = (await EvalAsync(cdp, Deep("[data-test=video-enhance-problem]") + " != null")).GetValue<bool>();
                 if (problem) throw new Exception("FAIL picture clean-up reported a problem");
                 if (fx1 - fx0 < 20) throw new Exception($"FAIL picture clean-up: only {fx1 - fx0} frames in 4 s");
                 await cdp.ScreenshotAsync(Path.Combine(shotDir, "drive-4-enhanced.png"));
                 await EvalAsync(cdp, toggle.Replace("@D", Deep("[data-test=set-video-enhance]")).Replace("@V", "false"));
                 await WaitForAttrAsync(cdp, "[data-test=drive-video]", "data-enhanced", "0", TimeSpan.FromSeconds(5), "the plain picture to come back");
-                Console.WriteLine($"PASS picture clean-up on the GPU: {(fx1 - fx0) / 4.0:F1} fps (plain {plainFps}), {fxMs} ms per frame copy+kernels+present; off again");
+                Console.WriteLine($"PASS picture clean-up on the GPU: {(fx1 - fx0) / 4.0:F1} fps (plain {plainFps}), {fxMs} ms per frame copy+kernels+present, output {fxSize}; off again");
             }
             sw.Restart();
             await ClickAsync(cdp, "[data-test=wheel-test-0]");

@@ -332,6 +332,7 @@ namespace MiniRover.Car
             string info = "info.firmware=" + Program.FirmwareVersion + "\n"
                 + "info.name=" + _name + "\n"
                 + "info.camera=" + _car.CameraSensor + "\n"
+                + _car.DescribeSensor()   // live sensor control values (set ones and driver defaults)
                 + "info.faults=" + _car.Faults + "\n"; // faults are joined with "; ", never line breaks
             Send(CarLink.EncodeSettings(_car.Settings.Describe() + info));
         }

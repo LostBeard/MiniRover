@@ -101,3 +101,36 @@ HRESULT Library_MiniRover_Native_MiniRover_Native_Camera::GetStat___STATIC__I4__
     }
     NANOCLR_NOCLEANUP();
 }
+
+HRESULT Library_MiniRover_Native_MiniRover_Native_Camera::SetControl___STATIC__I4__I4__I4( CLR_RT_StackFrame& stack )
+{
+    NANOCLR_HEADER(); hr = S_OK;
+    {
+
+        signed int param0;
+        NANOCLR_CHECK_HRESULT( Interop_Marshal_INT32( stack, 0, param0 ) );
+
+        signed int param1;
+        NANOCLR_CHECK_HRESULT( Interop_Marshal_INT32( stack, 1, param1 ) );
+
+        signed int retValue = Camera::SetControl( param0, param1, hr );
+        NANOCLR_CHECK_HRESULT( hr );
+        SetResult_INT32( stack, retValue );
+    }
+    NANOCLR_NOCLEANUP();
+}
+
+HRESULT Library_MiniRover_Native_MiniRover_Native_Camera::GetControl___STATIC__I4__I4( CLR_RT_StackFrame& stack )
+{
+    NANOCLR_HEADER(); hr = S_OK;
+    {
+
+        signed int param0;
+        NANOCLR_CHECK_HRESULT( Interop_Marshal_INT32( stack, 0, param0 ) );
+
+        signed int retValue = Camera::GetControl( param0, hr );
+        NANOCLR_CHECK_HRESULT( hr );
+        SetResult_INT32( stack, retValue );
+    }
+    NANOCLR_NOCLEANUP();
+}

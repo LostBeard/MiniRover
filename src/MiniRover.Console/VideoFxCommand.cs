@@ -30,7 +30,7 @@ static class VideoFxCommand
         Console.WriteLine($"videofx: {files.Length} frames, denoise {denoise}, sharpen {sharpen}, levels {levels}, white balance {whiteBalance}");
 
         int[]? prevIn = null, prevOut = null;
-        double noiseIn = 0, noiseOut = 0, lumaIn = 0, lumaOut = 0, blockIn = 0, blockOut = 0;
+        double noiseIn = 0, noiseOut = 0, lumaIn = 0, lumaOut = 0, blockIn = 0, blockOut = 0, chromaIn = 0, chromaOut = 0;
         int pairs = 0;
         var sw = new Stopwatch();
         for (int f = 0; f < files.Length; f++)
@@ -52,6 +52,8 @@ static class VideoFxCommand
             if (prevIn != null && prevOut != null)
             {
                 noiseIn += MeanAbsLumaDiff(pixels, prevIn, w, h);
+                chromaIn += MeanAbsChromaDiff(pixels, prevIn, w, h);
+                chromaOut += MeanAbsChromaDiff(result, prevOut, w, h);
                 noiseOut += MeanAbsLumaDiff(result, prevOut, w, h);
                 pairs++;
             }
@@ -66,9 +68,10 @@ static class VideoFxCommand
         }
         lumaIn /= files.Length;
         lumaOut /= files.Length;
-        if (pairs > 0) { noiseIn /= pairs; noiseOut /= pairs; }
+        if (pairs > 0) { noiseIn /= pairs; noiseOut /= pairs; chromaIn /= pairs; chromaOut /= pairs; }
         Console.WriteLine($"  mean luma {lumaIn:F1} -> {lumaOut:F1}; blockiness {blockIn / files.Length:F3} -> {blockOut / files.Length:F3} (1 = no 8x8 grid)");
         Console.WriteLine($"  frame-to-frame change {noiseIn:F2} -> {noiseOut:F2} luma; relative noise {noiseIn / lumaIn * 100:F2}% -> {noiseOut / lumaOut * 100:F2}%");
+        Console.WriteLine($"  colour noise (frame-to-frame chroma change) {chromaIn:F2} -> {chromaOut:F2} levels");
         Console.WriteLine($"  CPU accelerator time {sw.ElapsedMilliseconds / (double)files.Length:F1} ms/frame (not the browser's GPU time)");
         Console.WriteLine($"  images: {outDir} (left original, right processed)");
         return 0;
@@ -107,6 +110,26 @@ static class VideoFxCommand
             }
         }
         return nEdge == 0 || inside == 0 ? 1 : (atEdge / nEdge) / (inside / nInside);
+    }
+
+    /// <summary>Mean frame-to-frame change of the colour (|Cb| + |Cr| difference, BT.601) - colour speckle on a still scene.</summary>
+    static double MeanAbsChromaDiff(int[] a, int[] b, int w, int h)
+    {
+        if (a.Length != b.Length) return 0;
+        double s = 0;
+        for (int i = w; i < w * h; i++)
+        {
+            var (cba, cra) = Chroma(a[i]);
+            var (cbb, crb) = Chroma(b[i]);
+            s += Math.Abs(cba - cbb) + Math.Abs(cra - crb);
+        }
+        return s / (w * (h - 1));
+    }
+
+    static (double Cb, double Cr) Chroma(int p)
+    {
+        double r = p & 0xFF, g = (p >> 8) & 0xFF, b = (p >> 16) & 0xFF;
+        return (-0.1687 * r - 0.3313 * g + 0.5 * b, 0.5 * r - 0.4187 * g - 0.0813 * b);
     }
     static void WriteSideBySide(string path, int[] left, int[] right, int w, int h)
     {

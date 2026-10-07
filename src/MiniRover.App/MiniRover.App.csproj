@@ -16,8 +16,8 @@
 
   <ItemGroup>
     <PackageReference Include="SpawnDev.SpawnJS" Version="3.0.2" />
-    <PackageReference Include="SpawnDev.SpawnJS.RazorRenderer" Version="2.2.1" />
-    <PackageReference Include="SpawnDev.SpawnJS.RazorUI" Version="2.2.1" />
+    <PackageReference Include="SpawnDev.SpawnJS.RazorRenderer" Version="2.2.2" />
+    <PackageReference Include="SpawnDev.SpawnJS.RazorUI" Version="2.2.2" />
     <!-- Required in the exe project: its build targets produce main.classic.js. -->
     <PackageReference Include="SpawnDev.SpawnJS.WebWorkers" Version="2.2.1" />
   </ItemGroup>

@@ -139,12 +139,38 @@ namespace MiniRover.Car
             }
         }
 
+
+        /// <summary>Applies every sensor control a client set ("sensor.*" settings).</summary>
+        void ApplySensorControls()
+        {
+            for (int id = 1; id < Settings.SensorNames.Length; id++)
+            {
+                if (Settings.TryGetSensorControl(id, out int v)) MiniRover.Native.Camera.SetControl(id, v);
+            }
+        }
+
+        /// <summary>"sensor.&lt;name&gt;=&lt;value&gt;" lines with the values the sensor is running now (set or default).</summary>
+        public string DescribeSensor()
+        {
+            if (CameraSensor <= 0) return "";
+            var sb = new System.Text.StringBuilder();
+            for (int id = 1; id < Settings.SensorNames.Length; id++)
+            {
+                int v = MiniRover.Native.Camera.GetControl(id);
+                if (v != int.MinValue) sb.Append("sensor.").Append(Settings.SensorNames[id]).Append('=').Append(v).Append('\n');
+            }
+            return sb.ToString();
+        }
         /// <summary>Starts the camera head if one is fitted (the ultrasonic head has none). Not a fault when absent.</summary>
         public void InitCamera()
         {
             int r = MiniRover.Native.Camera.Init(Settings.CameraSize, Settings.CameraQuality);
             CameraSensor = r > 0 ? r : 0;
-            if (CameraSensor > 0) MiniRover.Native.Camera.SetOrientation(Settings.CameraMirror, Settings.CameraFlip);
+            if (CameraSensor > 0)
+            {
+                MiniRover.Native.Camera.SetOrientation(Settings.CameraMirror, Settings.CameraFlip);
+                ApplySensorControls();
+            }
             System.Diagnostics.Debug.WriteLine(CameraSensor > 0
                 ? "Camera: sensor 0x" + CameraSensor.ToString("X2") + (CameraSensor == MiniRover.Native.Camera.SensorGC0308 ? " (GC0308, software JPEG)" : CameraSensor == MiniRover.Native.Camera.SensorOV2640 ? " (OV2640)" : "")
                 : "Camera: none found (error " + r + ")");
@@ -156,6 +182,7 @@ namespace MiniRover.Car
             {
                 MiniRover.Native.Camera.Configure(Settings.CameraSize, Settings.CameraQuality);
                 MiniRover.Native.Camera.SetOrientation(Settings.CameraMirror, Settings.CameraFlip);
+                ApplySensorControls();
             }
             if (Servos != null)
             {

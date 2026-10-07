@@ -12,7 +12,7 @@
    Picture clean-up (per car, optional): the bitmap is copied into a GPU buffer, cleaned up by MiniRover.Video's
    kernels and presented to a WebGPU canvas, never leaving the GPU. When decoding falls behind, only the newest frame
    is kept, so the picture never lags behind the car. *@
-<div class="mr-video" data-test="drive-video" data-frames="@_decoded" data-fps="@_fps" data-enhanced="@(_gpuActive ? "1" : "0")" data-fx-ms="@_fxMs.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)">
+<div class="mr-video" data-test="drive-video" data-frames="@_decoded" data-fps="@_fps" data-enhanced="@(_gpuActive ? "1" : "0")" data-fx-ms="@_fxMs.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)" data-fx-size="@(_gpuCanvas == null ? "" : _gpuCanvas.Width + "x" + _gpuCanvas.Height)">
     <canvas @ref="_canvasRef" class="mr-video-canvas" style="@(_gpuActive ? "display:none" : null)"></canvas>
     <canvas @ref="_gpuCanvasRef" class="mr-video-canvas" style="@(_gpuActive ? null : "display:none")"></canvas>
     @if (_decoded == 0)
@@ -150,12 +150,23 @@
             if (!_wasEnhancing) _fx.ResetHistory(); // switched on (again): no stale frames in the noise filter
 
             var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-            if (_gpuCanvas!.Width != w || _gpuCanvas.Height != h)
+            // Output size: the frame as big as it is shown (fitted into the video box, in device pixels), so the GPU
+            // upscales it with a cubic filter instead of the browser stretching a small frame bilinearly. At most 4x the
+            // frame; under 1.2x it is not worth it.
+            int outW = w, outH = h;
+            double fit = Math.Min(_gpuCanvas!.ClientWidth / (double)w, _gpuCanvas.ClientHeight / (double)h) * _window!.DevicePixelRatio;
+            if (fit > 1.2)
             {
-                // The renderer draws at the frame's own size and leaves sizing the canvas to us (left at the browser
+                fit = Math.Min(fit, 4);
+                outW = (int)Math.Round(w * fit);
+                outH = (int)Math.Round(h * fit);
+            }
+            if (_gpuCanvas.Width != outW || _gpuCanvas.Height != outH)
+            {
+                // The renderer draws at the buffer's own size and leaves sizing the canvas to us (left at the browser
                 // default 300x150 it showed a cropped, stretched corner of the frame).
-                _gpuCanvas.Width = w;
-                _gpuCanvas.Height = h;
+                _gpuCanvas.Width = outW;
+                _gpuCanvas.Height = outH;
             }
             var input = _fx.Prepare(w, h);
             _copier!.CopyToBuffer(bitmap, w, h, input);
@@ -163,7 +174,7 @@
             _fxSettings.Sharpen = (float)Car.VideoSharpen;
             _fxSettings.AutoLevels = Car.VideoAutoLevels;
             _fxSettings.WhiteBalance = Car.VideoWhiteBalance;
-            _fx.Process(_fxSettings);
+            _fx.Process(_fxSettings, outW, outH);
             await _fx.Accelerator.SynchronizeAsync();
             await _presenter!.PresentAsync(_fx.Output);
             double ms = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;

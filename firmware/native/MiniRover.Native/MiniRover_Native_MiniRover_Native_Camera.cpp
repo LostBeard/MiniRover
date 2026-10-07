@@ -72,6 +72,8 @@ static volatile int s_encodeMs = 0;
 
 static TaskHandle_t s_task = NULL;
 
+static void cam_reapply_controls(); // sensor controls, below
+
 // A CLR soft reboot (deploy, debugger restart) restarts managed code but not this task: stop streaming so the new
 // program's first connection (which may get the same handle number) never receives frames it did not ask for.
 // The camera itself stays initialised; Init reconfigures it.
@@ -227,6 +229,7 @@ static esp_err_t cam_open(framesize_t size, int quality)
         if (s->set_hmirror != NULL) s->set_hmirror(s, s_hmirror ? 1 : 0);
         if (s->set_vflip != NULL) s->set_vflip(s, s_vflip ? 1 : 0);
     }
+    cam_reapply_controls(); // and every control the program set (Camera.SetControl)
     return ESP_OK;
 }
 
@@ -335,4 +338,99 @@ signed int Camera::GetStat(signed int param0, HRESULT &hr)
         case 5: return s_softJpeg ? s_encodeMs : 0;
     }
     return 0;
+}
+
+// ---- sensor controls (Camera.Ctrl*) ----
+
+#define CAM_CTRL_COUNT 22
+static int s_ctrlValue[CAM_CTRL_COUNT];
+static bool s_ctrlSet[CAM_CTRL_COUNT];
+
+// Applies one control to the sensor. -1 when the sensor has no such function or refused the value.
+static int cam_apply_control(sensor_t *s, int id, int v)
+{
+    if (s == NULL) return -1;
+    int (*fn)(sensor_t *, int) = NULL;
+    switch (id)
+    {
+        case 1: fn = s->set_brightness; break;
+        case 2: fn = s->set_contrast; break;
+        case 3: fn = s->set_saturation; break;
+        case 4: fn = s->set_sharpness; break;
+        case 5: fn = s->set_denoise; break;
+        case 6:
+            if (s->set_gainceiling == NULL) return -1;
+            return s->set_gainceiling(s, (gainceiling_t)v) == 0 ? 0 : -1;
+        case 7: fn = s->set_whitebal; break;
+        case 8: fn = s->set_awb_gain; break;
+        case 9: fn = s->set_wb_mode; break;
+        case 10: fn = s->set_gain_ctrl; break;
+        case 11: fn = s->set_agc_gain; break;
+        case 12: fn = s->set_exposure_ctrl; break;
+        case 13: fn = s->set_aec2; break;
+        case 14: fn = s->set_ae_level; break;
+        case 15: fn = s->set_aec_value; break;
+        case 16: fn = s->set_bpc; break;
+        case 17: fn = s->set_wpc; break;
+        case 18: fn = s->set_raw_gma; break;
+        case 19: fn = s->set_lenc; break;
+        case 20: fn = s->set_dcw; break;
+        case 21: fn = s->set_special_effect; break;
+        default: return -1;
+    }
+    if (fn == NULL) return -1;
+    return fn(s, v) == 0 ? 0 : -1;
+}
+
+// A restarted driver starts from the sensor defaults: put every control the program set back.
+static void cam_reapply_controls()
+{
+    sensor_t *s = esp_camera_sensor_get();
+    for (int i = 1; i < CAM_CTRL_COUNT; i++)
+    {
+        if (s_ctrlSet[i]) cam_apply_control(s, i, s_ctrlValue[i]);
+    }
+}
+
+signed int Camera::SetControl(signed int param0, signed int param1, HRESULT &hr)
+{
+    (void)hr;
+    if (param0 <= 0 || param0 >= CAM_CTRL_COUNT) return -1;
+    s_ctrlValue[param0] = param1;
+    s_ctrlSet[param0] = true;
+    if (!s_ready) return 0; // applied when the camera starts
+    return cam_apply_control(esp_camera_sensor_get(), param0, param1);
+}
+
+signed int Camera::GetControl(signed int param0, HRESULT &hr)
+{
+    (void)hr;
+    sensor_t *s = esp_camera_sensor_get();
+    if (s == NULL) return INT32_MIN;
+    const camera_status_t &st = s->status;
+    switch (param0)
+    {
+        case 1: return st.brightness;
+        case 2: return st.contrast;
+        case 3: return st.saturation;
+        case 4: return st.sharpness;
+        case 5: return st.denoise;
+        case 6: return st.gainceiling;
+        case 7: return st.awb;
+        case 8: return st.awb_gain;
+        case 9: return st.wb_mode;
+        case 10: return st.agc;
+        case 11: return st.agc_gain;
+        case 12: return st.aec;
+        case 13: return st.aec2;
+        case 14: return st.ae_level;
+        case 15: return st.aec_value;
+        case 16: return st.bpc;
+        case 17: return st.wpc;
+        case 18: return st.raw_gma;
+        case 19: return st.lenc;
+        case 20: return st.dcw;
+        case 21: return st.special_effect;
+        default: return INT32_MIN;
+    }
 }

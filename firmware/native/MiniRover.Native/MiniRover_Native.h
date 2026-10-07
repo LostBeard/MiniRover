@@ -31,6 +31,8 @@ struct Library_MiniRover_Native_MiniRover_Native_Camera
     NANOCLR_NATIVE_DECLARE(Configure___STATIC__BOOLEAN__I4__I4);
     NANOCLR_NATIVE_DECLARE(SetOrientation___STATIC__VOID__BOOLEAN__BOOLEAN);
     NANOCLR_NATIVE_DECLARE(GetStat___STATIC__I4__I4);
+    NANOCLR_NATIVE_DECLARE(SetControl___STATIC__I4__I4__I4);
+    NANOCLR_NATIVE_DECLARE(GetControl___STATIC__I4__I4);
 
     //--//
 };

@@ -44,11 +44,12 @@ public sealed class VideoEnhancer : IDisposable
     readonly Action<Index1D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>, int, int> _solve;
     readonly Action<Index2D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>, int, int, float, float, float, int, int> _denoise;
     readonly Action<Index2D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>, int, int, int, float> _deblock;
-    readonly Action<Index2D, ArrayView1D<int, Stride1D.Dense>, ArrayView2D<int, Stride2D.DenseX>, ArrayView1D<float, Stride1D.Dense>, int, int, float> _tone;
+    readonly Action<Index2D, ArrayView1D<int, Stride1D.Dense>, ArrayView2D<int, Stride2D.DenseX>, ArrayView1D<float, Stride1D.Dense>, int, int, float, float> _tone;
+    readonly Action<Index2D, ArrayView2D<int, Stride2D.DenseX>, ArrayView2D<int, Stride2D.DenseX>, int, int, int, int> _upscale;
 
     MemoryBuffer1D<int, Stride1D.Dense>? _input, _deblockH, _deblockHV, _history, _clean, _statsBuf;
     MemoryBuffer1D<float, Stride1D.Dense>? _params;
-    MemoryBuffer2D<int, Stride2D.DenseX>? _output;
+    MemoryBuffer2D<int, Stride2D.DenseX>? _output, _upscaled, _shown;
     int _width, _height;
     bool _historyValid;
 
@@ -60,13 +61,14 @@ public sealed class VideoEnhancer : IDisposable
         _solve = accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<float, Stride1D.Dense>, int, int>(SolveKernel);
         _deblock = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>, int, int, int, float>(DeblockKernel);
         _denoise = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>, ArrayView1D<int, Stride1D.Dense>, int, int, float, float, float, int, int>(DenoiseKernel);
-        _tone = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView1D<int, Stride1D.Dense>, ArrayView2D<int, Stride2D.DenseX>, ArrayView1D<float, Stride1D.Dense>, int, int, float>(ToneKernel);
+        _tone = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView1D<int, Stride1D.Dense>, ArrayView2D<int, Stride2D.DenseX>, ArrayView1D<float, Stride1D.Dense>, int, int, float, float>(ToneKernel);
+        _upscale = accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView2D<int, Stride2D.DenseX>, ArrayView2D<int, Stride2D.DenseX>, int, int, int, int>(UpscaleKernel);
     }
 
     public Accelerator Accelerator => _accelerator;
 
-    /// <summary>The processed frame (width x height) after <see cref="Process"/>.</summary>
-    public MemoryBuffer2D<int, Stride2D.DenseX> Output => _output ?? throw new InvalidOperationException("Prepare first");
+    /// <summary>The processed frame after <see cref="Process"/>: the frame's size, or the requested output size.</summary>
+    public MemoryBuffer2D<int, Stride2D.DenseX> Output => _shown ?? throw new InvalidOperationException("Process first");
 
     /// <summary>Sizes the buffers for a frame and returns the view the decoded frame must be copied into.</summary>
     public ArrayView1D<int, Stride1D.Dense> Prepare(int width, int height)
@@ -98,9 +100,10 @@ public sealed class VideoEnhancer : IDisposable
         _params?.MemSetToZero();
     }
 
-    /// <summary>Runs every stage on the frame in the <see cref="Prepare"/> view; the result is in <see cref="Output"/>.
-    /// Only enqueues the work: synchronise (or present) to wait for it.</summary>
-    public void Process(VideoEnhanceSettings s)
+    /// <summary>Runs every stage on the frame in the <see cref="Prepare"/> view; the result is in <see cref="Output"/>,
+    /// at <paramref name="outWidth"/> x <paramref name="outHeight"/> when given (Catmull-Rom upscaling for a big screen:
+    /// sharper than the browser's bilinear scaling of a small frame). Only enqueues the work: synchronise (or present).</summary>
+    public void Process(VideoEnhanceSettings s, int outWidth = 0, int outHeight = 0)
     {
         if (_input == null) throw new InvalidOperationException("Prepare first");
         int w = _width, h = _height;
@@ -138,7 +141,21 @@ public sealed class VideoEnhancer : IDisposable
             _historyValid && d > 0 ? 1 : 0, fixTop);
         _historyValid = true;
 
-        _tone(new Index2D(w, h), _clean.View, _output!.View, _params!.View, w, h, Clamp01(s.Sharpen));
+        // Shadow colour: part of the noise reduction (full at 50% and up, none at 0).
+        float shadowColour = 1f - 0.65f * (d * 2 > 1 ? 1 : d * 2);
+        _tone(new Index2D(w, h), _clean.View, _output!.View, _params!.View, w, h, Clamp01(s.Sharpen), shadowColour);
+        _shown = _output;
+
+        if (outWidth > 0 && outHeight > 0 && (outWidth != w || outHeight != h))
+        {
+            if (_upscaled == null || _upscaled.IntExtent.X != outWidth || _upscaled.IntExtent.Y != outHeight)
+            {
+                _upscaled?.Dispose();
+                _upscaled = _accelerator.Allocate2DDenseX<int>(new Index2D(outWidth, outHeight));
+            }
+            _upscale(new Index2D(outWidth, outHeight), _output.View, _upscaled.View, w, h, outWidth, outHeight);
+            _shown = _upscaled;
+        }
     }
 
     static float Clamp01(float v) => v < 0 ? 0 : (v > 1 ? 1 : v);
@@ -329,7 +346,7 @@ public sealed class VideoEnhancer : IDisposable
     }
 
     static void ToneKernel(Index2D idx, ArrayView1D<int, Stride1D.Dense> clean, ArrayView2D<int, Stride2D.DenseX> output,
-        ArrayView1D<float, Stride1D.Dense> prm, int w, int h, float sharpen)
+        ArrayView1D<float, Stride1D.Dense> prm, int w, int h, float sharpen, float shadowColour)
     {
         int x = idx.X, y = idx.Y;
         int c = clean[y * w + x];
@@ -367,7 +384,50 @@ public sealed class VideoEnhancer : IDisposable
         r = Curve((r * gr / 255f - black) / range, lift);
         g = Curve((g * gg / 255f - black) / range, lift);
         b = Curve((b * gb / 255f - black) / range, lift);
+        // Deep shadows lose most of their colour: there the colour is sensor noise (magenta speckle once the gain and
+        // the shadow lift raise it - seen in Chrome on the car), not the scene. Same luma ramp as the white balance:
+        // shadowColour (0.35 at full noise reduction) at luma 16 and below, full colour from 64.
+        float sat = shadowColour + (1 - shadowColour) * t;
+        float l = r * 0.299f + g * 0.587f + b * 0.114f;
+        r = l + (r - l) * sat;
+        g = l + (g - l) * sat;
+        b = l + (b - l) * sat;
         output[idx] = Pack(r * 255f, g * 255f, b * 255f);
+    }
+
+    /// <summary>Catmull-Rom (bicubic) resampling of the finished frame to the output size: pixel centres line up, edge
+    /// pixels repeat, and the packing clamps the slight overshoot a cubic filter has at hard edges.</summary>
+    static void UpscaleKernel(Index2D idx, ArrayView2D<int, Stride2D.DenseX> src, ArrayView2D<int, Stride2D.DenseX> dst,
+        int sw, int sh, int dw, int dh)
+    {
+        float fx = (idx.X + 0.5f) * sw / dw - 0.5f;
+        float fy = (idx.Y + 0.5f) * sh / dh - 0.5f;
+        int x0 = fx < 0 ? -1 : (int)fx, y0 = fy < 0 ? -1 : (int)fy;
+        float tx = fx - x0, ty = fy - y0;
+        float r = 0, g = 0, b = 0;
+        for (int j = -1; j <= 2; j++)
+        {
+            float wy = CatmullRom(j - ty);
+            int sy = ClampI(y0 + j, 0, sh - 1);
+            for (int i = -1; i <= 2; i++)
+            {
+                float wgt = CatmullRom(i - tx) * wy;
+                int p = src[new Index2D(ClampI(x0 + i, 0, sw - 1), sy)];
+                r += (p & 0xFF) * wgt;
+                g += ((p >> 8) & 0xFF) * wgt;
+                b += ((p >> 16) & 0xFF) * wgt;
+            }
+        }
+        dst[idx] = Pack(r, g, b);
+    }
+
+    /// <summary>Catmull-Rom kernel weight at distance d (|d| &lt; 2).</summary>
+    static float CatmullRom(float d)
+    {
+        if (d < 0) d = -d;
+        if (d < 1) return (1.5f * d - 2.5f) * d * d + 1f;
+        if (d < 2) return ((-0.5f * d + 2.5f) * d - 4f) * d + 2f;
+        return 0;
     }
 
     /// <summary>Shadow lift without pow: y = x(1+k)/(1+kx) keeps 0 and 1 fixed and raises the darks for k &gt; 0.</summary>
@@ -391,8 +451,9 @@ public sealed class VideoEnhancer : IDisposable
         _history?.Dispose();
         _clean?.Dispose();
         _output?.Dispose();
+        _upscaled?.Dispose();
         _input = _deblockH = _deblockHV = _history = _clean = null;
-        _output = null;
+        _output = _upscaled = _shown = null;
     }
 
     public void Dispose()

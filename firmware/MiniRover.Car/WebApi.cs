@@ -291,6 +291,21 @@ sb.Append(",\"faults\":\"").Append(JsonEscape(faults)).Append('"');
                 catch (Exception ex) { shown = "error: " + ex.Message; }
                 sb.Append(",\"face\":{\"mode\":").Append(_car.Face.Mode.ToString()).Append(",\"shown\":\"").Append(shown).Append("\"}");
             }
+            if (_car.CameraSensor > 0)
+            {
+                // Live sensor control values (what the sensor runs now, set or default).
+                sb.Append(",\"sensor\":{");
+                bool first = true;
+                for (int id = 1; id < Settings.SensorNames.Length; id++)
+                {
+                    int v = MiniRover.Native.Camera.GetControl(id);
+                    if (v == int.MinValue) continue;
+                    if (!first) sb.Append(',');
+                    first = false;
+                    sb.Append('"').Append(Settings.SensorNames[id]).Append("\":").Append(v.ToString());
+                }
+                sb.Append('}');
+            }
             sb.Append(",\"bootVolts\":").Append(_car.BootVolts.ToString("F2"));
             sb.Append(",\"resetReason\":\"").Append(Program.ResetReasonName(MiniRover.Native.Board.ResetReason())).Append('"');
             sb.Append(",\"lastAbnormalReset\":\"").Append(JsonEscape(_car.Settings.LastAbnormalReset)).Append('"');

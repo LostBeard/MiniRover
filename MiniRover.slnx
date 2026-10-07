@@ -9,5 +9,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/MiniRover.Client.Tests/MiniRover.Client.Tests.csproj" />
     <Project Path="tests/MiniRover.Protocol.Tests/MiniRover.Protocol.Tests.csproj" />
+    <Project Path="tests/MiniRover.Video.Tests/MiniRover.Video.Tests.csproj" />
   </Folder>
 </Solution>

@@ -55,6 +55,43 @@ namespace MiniRover.Car
         /// </summary>
         public string LedCorners { get => GetString("led.corners", "------------"); set => SetString("led.corners", value); }
 
+        // Camera sensor controls, "sensor.<name>" keys, index = MiniRover.Native.Camera.Ctrl* id. Stored only once a
+        // client sets one; an unset control keeps the driver's default (the app is shown the sensor's live value).
+        public static readonly string[] SensorNames =
+        {
+            "", "brightness", "contrast", "saturation", "sharpness", "denoise", "gainceiling", "awb", "awbgain", "wbmode",
+            "agc", "agcgain", "aec", "aec2", "aelevel", "aecvalue", "bpc", "wpc", "rawgamma", "lenc", "dcw", "effect",
+        };
+        static readonly int[] s_sensorMin = { 0, -2, -2, -2, -2, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, 0, 0, 0, 0, 0, 0, 0 };
+        static readonly int[] s_sensorMax = { 0, 2, 2, 2, 2, 8, 6, 1, 1, 4, 1, 30, 1, 1, 2, 1200, 1, 1, 1, 1, 1, 6 };
+
+        /// <summary>The Camera.Ctrl* id of a "sensor.&lt;name&gt;" key, or 0.</summary>
+        public static int SensorControlId(string key)
+        {
+            if (key == null || !key.StartsWith("sensor.")) return 0;
+            string name = key.Substring(7);
+            for (int i = 1; i < SensorNames.Length; i++) if (SensorNames[i] == name) return i;
+            return 0;
+        }
+
+        /// <summary>A sensor control the client set (false = never set: the driver default applies).</summary>
+        public bool TryGetSensorControl(int id, out int value)
+        {
+            value = 0;
+            if (id <= 0 || id >= SensorNames.Length) return false;
+            string v = GetString("sensor." + SensorNames[id], "");
+            if (v.Length == 0)
+            {
+                // MiniRover's own default where the driver's is wrong for a car indoors. The gain ceiling: esp32-camera
+                // leaves the OV2640 at 2x, which starves auto gain in a room. Measured on the car (QVGA, room light):
+                // 2x mean luma 31.5 / relative noise 5.97% / JPEG block grid 2.98; 8x 66.4 / 5.45% / 2.28; 32x 70.4 /
+                // 5.52% / 2.26 with visibly more colour noise. 8x it is.
+                if (id == 6) { value = 2; return true; }
+                return false;
+            }
+            try { value = int.Parse(v); return true; } catch { return false; }
+        }
+
         /// <summary>The local HTTP test API (curl drive/servo/led routes). Off by default: HTTP on the LAN is not paired.</summary>
         public bool HttpApi { get => GetDouble("http.api", 0) != 0; set => Set("http.api", value ? 1 : 0); }
 
@@ -129,6 +166,19 @@ namespace MiniRover.Car
                 if (corners.Length != 12) return false;
                 for (int i = 0; i < corners.Length; i++) if ("0123-".IndexOf(corners[i]) < 0) return false;
                 LedCorners = corners;
+                return true;
+            }
+            int sensor = SensorControlId(key);
+            if (sensor > 0)
+            {
+                // Integer in the control's range; empty = forget it (the driver default applies from the next start).
+                string text = kv.Substring(eq + 1).Trim();
+                if (text.Length == 0) { SetString(key, ""); return true; }
+                int iv;
+                try { iv = int.Parse(text); } catch { return false; }
+                if (iv < s_sensorMin[sensor]) iv = s_sensorMin[sensor];
+                if (iv > s_sensorMax[sensor]) iv = s_sensorMax[sensor];
+                SetString(key, iv.ToString());
                 return true;
             }
             double v;

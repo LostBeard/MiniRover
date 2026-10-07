@@ -82,6 +82,10 @@ Freenove ships two camera types, **OV2640** or **GC0308**, and the board cannot 
 
 **Orientation:** the camera head holds the sensor upside down. MiniRover's default is a 180-degree rotation (`camera.flip=1`, `camera.mirror=1`), verified on an OV2640 by panning: with the camera turned left (pan above 90), the scene moves right in the picture, as it should for an unmirrored image. If your picture is mirrored or upside down, change those two settings.
 
+**Sensor gain:** esp32-camera leaves the OV2640's automatic gain capped at 2x, which leaves a room-lit picture dark. MiniRover sets the cap to 8x (`sensor.gainceiling=2`). Measured on an OV2640 at 320x240 in room light: mean brightness 31.5 -> 66.4 (of 255), with slightly less relative noise and fewer visible JPEG blocks; a 32x cap adds little brightness and more colour noise. Every sensor control the driver offers is a `sensor.*` setting (`/status` -> `sensor` shows the live values); see `firmware/MiniRover.Native/Camera.cs` for the ranges.
+
+**Known sensor artifacts** (seen on the first car, OV2640): the top pixel row is a wrong-coloured line in every frame (the app's picture clean-up replaces it), and at higher gain there are faint horizontal line streaks.
+
 **Resources the camera takes** (so nothing else uses them): XCLK on LEDC low-speed timer 3 / channel 7, SCCB on I2C port 1, I2S0 for the parallel data, and about 40 KB of internal RAM for DMA buffers and its task.
 
 ## Power

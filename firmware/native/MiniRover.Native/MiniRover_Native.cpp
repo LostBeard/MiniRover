@@ -22,12 +22,14 @@ static const CLR_RT_MethodHandler method_lookup[] =
     Library_MiniRover_Native_MiniRover_Native_Camera::Configure___STATIC__BOOLEAN__I4__I4,
     Library_MiniRover_Native_MiniRover_Native_Camera::SetOrientation___STATIC__VOID__BOOLEAN__BOOLEAN,
     Library_MiniRover_Native_MiniRover_Native_Camera::GetStat___STATIC__I4__I4,
+    Library_MiniRover_Native_MiniRover_Native_Camera::SetControl___STATIC__I4__I4__I4,
+    Library_MiniRover_Native_MiniRover_Native_Camera::GetControl___STATIC__I4__I4,
 };
 
 const CLR_RT_NativeAssemblyData g_CLR_AssemblyNative_MiniRover_Native =
 {
     "MiniRover.Native",
-    0x25B09AE7,
+    0xFF7D9B71,
     method_lookup,
     { 1, 0, 0, 0 }
 };
