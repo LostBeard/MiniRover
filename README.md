@@ -74,3 +74,5 @@ Issues and pull requests are welcome. If you have the kit and something does not
 ## License
 
 [MIT](LICENSE). Freenove, FNK0053 and the Freenove kit hardware belong to Freenove; MiniRover is an independent community project and is not affiliated with Freenove.
+
+The face-tracking model (`src/MiniRover.App/wwwroot/models/blaze-face/model.tflite`) is Google's MediaPipe BlazeFace short-range detector, unmodified, under the Apache License 2.0; see the NOTICE next to it.

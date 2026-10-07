@@ -20,6 +20,8 @@
     <PackageReference Include="SpawnDev.SpawnJS.RazorUI" Version="2.2.2" />
     <!-- Required in the exe project: its build targets produce main.classic.js. -->
     <PackageReference Include="SpawnDev.SpawnJS.WebWorkers" Version="2.2.1" />
+    <!-- Face tracking: BlazeFace on the GPU (the model is bundled in wwwroot/models, Apache-2.0, see its NOTICE). -->
+    <PackageReference Include="SpawnDev.ILGPU.ML" Version="5.3.3" />
   </ItemGroup>
 
   <ItemGroup>

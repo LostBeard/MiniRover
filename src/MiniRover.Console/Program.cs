@@ -32,7 +32,14 @@ if (args.Length >= 3 && args[0] == "videofx")
     return MiniRover.ConsoleApp.VideoFxCommand.Run(args[1], args[2], Arg(3, 0.5f), Arg(4, 0.3f), Arg(5, 1) != 0, Arg(6, 1) != 0);
 }
 
-// minirover drivetest <publish wwwroot> [httpPort] [cdpPort] [screenshotDir] [--reboot COMx] [--loss permille] [--car http://ip]   (THE WHEELS MUST BE OFF THE GROUND)
+// minirover facetest <image> [model.tflite]: the app's face-detection path (clean-up + BlazeFace) on one image
+if (args.Length >= 2 && args[0] == "facetest")
+{
+    string model = args.Length > 2 ? args[2] : Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "MiniRover.App", "wwwroot", "models", "blaze-face", "model.tflite");
+    return await MiniRover.ConsoleApp.FaceTestCommand.RunAsync(args[1], model);
+}
+
+// minirover drivetest <publish wwwroot> [httpPort] [cdpPort] [screenshotDir] [--reboot COMx] [--loss permille] [--car http://ip] [--quiet]   (THE WHEELS MUST BE OFF THE GROUND; --quiet: no motors, buzzer or 12 LEDs)
 if (args.Length >= 2 && args[0] == "drivetest")
 {
     return await DriveTest.RunAsync(args[1],
@@ -42,7 +49,8 @@ if (args.Length >= 2 && args[0] == "drivetest")
         args.SkipWhile(a => a != "--reboot").Skip(1).FirstOrDefault(),
         int.TryParse(args.SkipWhile(a => a != "--loss").Skip(1).FirstOrDefault(), out int lossArg) ? lossArg : 0,
         args.SkipWhile(a => a != "--car").Skip(1).FirstOrDefault(),
-        args.Contains("--calibrate-lights"));
+        args.Contains("--calibrate-lights"),
+        args.Contains("--quiet"));
 }
 
 // minirover webtest <publish wwwroot> <COMx> [httpPort] [cdpPort] [screenshotDir]

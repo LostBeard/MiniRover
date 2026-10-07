@@ -43,7 +43,7 @@
         <div class="mr-banner mr-warn" data-test="drive-battery-warning">The battery switch is off (USB power only): the wheels and camera servos will not move.</div>
     }
 
-    <VideoView Channel="_video" Car="Car" />
+    <VideoView Channel="_video" Car="Car" FaceTracking="_faceTracking" OnFace="OnFace" />
 
     <div class="mr-controls">
         <Stick Label="Drive" TestId="stick-drive" OnMove="OnDriveStick" />
@@ -52,6 +52,7 @@
             <UiButton Secondary="@(_lightsIndex == 0)" OnClick="ToggleLights" data-test="btn-lights" data-mode="@LightModes[_lightsIndex].Mode">Lights: @LightModes[_lightsIndex].Name</UiButton>
             <UiButton Secondary="true" OnClick="CenterCamera" data-test="btn-center">Center camera</UiButton>
             <UiButton Secondary="true" OnClick="CycleSpeed" data-test="btn-speed">Speed: @SpeedName</UiButton>
+            <UiButton Secondary="@(!_faceTracking)" OnClick="ToggleFaceTracking" data-test="btn-face">Follow my face</UiButton>
             <UiButton Secondary="@(!_showEyes)" OnClick="@(() => _showEyes = !_showEyes)" data-test="btn-eyes">Eyes</UiButton>
             <UiButton Secondary="@(!_showSettings)" OnClick="@(() => _showSettings = !_showSettings)" data-test="btn-settings">Settings</UiButton>
         </div>
@@ -65,7 +66,7 @@
     {
         <CarSettingsPanel Link="_link" Car="Car" Volts="@(_t == null ? null : _t.BatteryMillivolts / 1000.0)" OnLocalChanged="ApplyDrivingFeel" />
     }
-    <p class="mr-muted mr-keys">Keyboard: W A S D or arrows to drive, Space horn, L lights, C center camera. Gamepad: left stick or triggers to drive, right stick aims the camera, A horn, Y lights, B center.</p>
+    <p class="mr-muted mr-keys">Keyboard: W A S D or arrows to drive, Space horn, L lights, C center camera, F follow my face. Gamepad: left stick or triggers to drive, right stick aims the camera, A horn, Y lights, B center.</p>
 </div>
 
 @code {
@@ -391,6 +392,7 @@
 
     Task OnCameraStick((double X, double Y) v)
     {
+        if (_faceTracking && (v.X != 0 || v.Y != 0)) _faceTracking = false; // the driver takes the camera back
         // The pad maps directly to angles: full left/right = 60 degrees each way, full up/down = the tilt range.
         _pan = 90 - v.X * 60;
         _tilt = Math.Clamp(90 + v.Y * 60, 80, 180);
@@ -404,6 +406,7 @@
         if (!_keys.Add(k)) return; // auto-repeat
         if (k == " ") Horn();
         else if (k == "l") ToggleLights();
+        else if (k == "f") ToggleFaceTracking();
         else if (k == "c") CenterCamera();
         e.Dispose();
     }
@@ -447,7 +450,25 @@
         try { _link.Lights(LightModes[_lightsIndex].Mode, 40, 40, 40); } catch (InvalidOperationException) { }
     }
 
-    void CenterCamera() { _pan = 90; _tilt = 90; }
+    void CenterCamera() { _faceTracking = false; _pan = 90; _tilt = 90; }
+
+    // Face tracking: the camera servos follow the face the video view finds (BlazeFace on the GPU). The wheels
+    // never move. Grabbing the camera stick or centring the camera hands control back to the driver.
+    readonly FaceFollower _follower = new();
+    readonly System.Diagnostics.Stopwatch _faceClock = System.Diagnostics.Stopwatch.StartNew();
+    bool _faceTracking;
+
+    void ToggleFaceTracking()
+    {
+        _faceTracking = !_faceTracking;
+        _follower.Reset();
+    }
+
+    void OnFace(FaceSighting? face)
+    {
+        if (!_faceTracking || face is not FaceSighting f) return;
+        (_pan, _tilt) = _follower.Update(_pan, _tilt, f.X, f.Y, _faceClock.Elapsed);
+    }
 
     void CycleSpeed() => _speed = (_speed + 1) % Speeds.Length;
 

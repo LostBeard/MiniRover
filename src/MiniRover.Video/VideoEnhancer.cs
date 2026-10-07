@@ -70,6 +70,13 @@ public sealed class VideoEnhancer : IDisposable
     /// <summary>The processed frame after <see cref="Process"/>: the frame's size, or the requested output size.</summary>
     public MemoryBuffer2D<int, Stride2D.DenseX> Output => _shown ?? throw new InvalidOperationException("Process first");
 
+    /// <summary>The cleaned frame at the camera's own size, packed RGBA as one row-major view: what the ML modes read
+    /// (face detection), so they see the same cleaned picture the driver does, without leaving the GPU.</summary>
+    public ArrayView1D<int, Stride1D.Dense> FrameView => (_output ?? throw new InvalidOperationException("Process first")).View.AsContiguous();
+
+    public int Width => _width;
+    public int Height => _height;
+
     /// <summary>Sizes the buffers for a frame and returns the view the decoded frame must be copied into.</summary>
     public ArrayView1D<int, Stride1D.Dense> Prepare(int width, int height)
     {

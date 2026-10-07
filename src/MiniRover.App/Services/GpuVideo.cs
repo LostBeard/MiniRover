@@ -19,6 +19,35 @@ public static class GpuVideo
 
     public static Task<Accelerator?> GetAsync() => _init ??= InitAsync();
 
+    static Task<SpawnDev.ILGPU.ML.Pipelines.FaceDetectionPipeline?>? _faces;
+
+    /// <summary>Why the face detector is not available ("" while it is fine).</summary>
+    public static string FaceStatus { get; private set; } = "";
+
+    /// <summary>The face detector (BlazeFace, bundled in wwwroot/models), loaded once on the shared accelerator.</summary>
+    public static Task<SpawnDev.ILGPU.ML.Pipelines.FaceDetectionPipeline?> GetFaceDetectorAsync(HttpClient http) => _faces ??= LoadFacesAsync(http);
+
+    static async Task<SpawnDev.ILGPU.ML.Pipelines.FaceDetectionPipeline?> LoadFacesAsync(HttpClient http)
+    {
+        try
+        {
+            var accelerator = await GetAsync();
+            if (accelerator == null)
+            {
+                FaceStatus = Status;
+                return null;
+            }
+            byte[] model = await http.GetByteArrayAsync("models/blaze-face/model.tflite"); // 229 KB
+            var session = SpawnDev.ILGPU.ML.InferenceSession.CreateFromFile(accelerator, model);
+            return new SpawnDev.ILGPU.ML.Pipelines.FaceDetectionPipeline(session, accelerator);
+        }
+        catch (Exception ex)
+        {
+            FaceStatus = "the face detector could not start: " + ex.Message;
+            return null;
+        }
+    }
+
     static async Task<Accelerator?> InitAsync()
     {
         try

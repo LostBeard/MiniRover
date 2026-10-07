@@ -97,3 +97,6 @@ html, body {
 .mr-eye-text { display: flex; gap: 0.5rem; align-items: center; }
 .mr-eye-text > :first-child { flex: 1; min-width: 0; }
 .mr-eye-start { display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+
+/* Face tracking: the box over the face being followed */
+.mr-face-box { position: absolute; border: 2px solid var(--mr-accent); border-radius: 6px; pointer-events: none; box-shadow: 0 0 6px var(--mr-accent); }

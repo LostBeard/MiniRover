@@ -6,6 +6,7 @@
 @using MiniRover.Video
 @inject SpawnJSRuntime JS
 @inject SpawnDomRenderer Renderer
+@inject HttpClient Http
 
 @* Live camera frames. Each JPEG arrives as a JavaScript ArrayBuffer and is decoded by the browser
    (createImageBitmap): the bytes never cross into .NET memory. Plain picture: the bitmap is drawn on a 2D canvas.
@@ -19,6 +20,11 @@
     {
         <span class="mr-video-note mr-muted">@(Channel == null ? "Waiting for video..." : "Starting the camera...")</span>
     }
+    <div class="mr-face-box" style="@(FaceTracking ? FaceBoxStyle() : "display:none")" data-test="face-box" data-face="@(_face is FaceSighting fs ? fs.X.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + "," + fs.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "")" data-face-ms="@_faceMs.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)"></div>
+    @if (_faceProblem != null && FaceTracking)
+    {
+        <span class="mr-video-badge mr-muted" data-test="face-problem">Face tracking off: @_faceProblem</span>
+    }
     @if (_gpuProblem != null)
     {
         <span class="mr-video-badge mr-muted" data-test="video-enhance-problem">Picture clean-up off: @_gpuProblem</span>
@@ -30,6 +36,12 @@
 
     /// <summary>The car being driven: its picture clean-up settings are read for every frame.</summary>
     [Parameter] public Services.SavedCar? Car { get; set; }
+
+    /// <summary>Find a face in every frame (on the GPU, BlazeFace) and report it through <see cref="OnFace"/>.</summary>
+    [Parameter] public bool FaceTracking { get; set; }
+
+    /// <summary>Each detection: the face found, or null when there is none.</summary>
+    [Parameter] public Action<FaceSighting?>? OnFace { get; set; }
 
     ElementReference _canvasRef, _gpuCanvasRef;
     HTMLCanvasElement? _canvas, _gpuCanvas;
@@ -85,7 +97,7 @@
                 using (bitmap)
                 {
                     int w = (int)bitmap.Width, h = (int)bitmap.Height;
-                    bool enhance = Car?.VideoEnhance == true && _gpuProblem == null;
+                    bool enhance = (Car?.VideoEnhance == true || FaceTracking) && _gpuProblem == null;
                     if (enhance && await DrawEnhancedAsync(bitmap, w, h))
                     {
                         if (!_gpuActive) { _gpuActive = true; StateHasChanged(); }
@@ -170,13 +182,17 @@
             }
             var input = _fx.Prepare(w, h);
             _copier!.CopyToBuffer(bitmap, w, h, input);
-            _fxSettings.Denoise = (float)Car!.VideoDenoise;
-            _fxSettings.Sharpen = (float)Car.VideoSharpen;
-            _fxSettings.AutoLevels = Car.VideoAutoLevels;
-            _fxSettings.WhiteBalance = Car.VideoWhiteBalance;
+            bool cleanUp = Car?.VideoEnhance == true; // face tracking alone uses the GPU path with every stage off
+            _fxSettings.Denoise = cleanUp ? (float)Car!.VideoDenoise : 0;
+            _fxSettings.Sharpen = cleanUp ? (float)Car!.VideoSharpen : 0;
+            _fxSettings.AutoLevels = cleanUp && Car!.VideoAutoLevels;
+            _fxSettings.WhiteBalance = cleanUp && Car!.VideoWhiteBalance;
             _fx.Process(_fxSettings, outW, outH);
+            if (FaceTracking) StartFaceDetection(w, h);
             await _fx.Accelerator.SynchronizeAsync();
             await _presenter!.PresentAsync(_fx.Output);
+            _boxW = _gpuCanvas.ClientWidth;
+            _boxH = _gpuCanvas.ClientHeight;
             double ms = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
             _fxMs = _fxMs <= 0 ? ms : _fxMs * 0.9 + ms * 0.1;
             return true;
@@ -188,6 +204,96 @@
             StateHasChanged();
             return false;
         }
+    }
+
+    // ---- face tracking ----
+    SpawnDev.ILGPU.ML.Pipelines.FaceDetectionPipeline? _faces;
+    bool _detecting, _faceLoading;
+    long _lastDetect;
+    FaceSighting? _face;        // latest sighting, for the box over the picture
+    int _boxW, _boxH;           // the video box in CSS pixels (the picture is fitted into it)
+    int _frameW = 320, _frameH = 240;
+
+    /// <summary>
+    /// Starts one detection on the frame just processed, unless one is still running or the last started under
+    /// 100 ms ago. The detector's first GPU step is queued at once, before the next frame can overwrite the buffer;
+    /// the rest runs while video carries on.
+    /// </summary>
+    void StartFaceDetection(int w, int h)
+    {
+        if (_detecting) return;
+        if (_faces == null)
+        {
+            if (!_faceLoading)
+            {
+                _faceLoading = true;
+                _ = LoadFacesAsync();
+            }
+            return;
+        }
+        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (System.Diagnostics.Stopwatch.GetElapsedTime(_lastDetect, now).TotalMilliseconds < 100) return;
+        _lastDetect = now;
+        _detecting = true;
+        _frameW = w;
+        _frameH = h;
+        _ = DetectAsync(_faces.DetectAsync(_fx!.FrameView, w, h, confidenceThreshold: 0.6f, maxFaces: 1), w, h);
+    }
+
+    async Task LoadFacesAsync()
+    {
+        var faces = await GpuVideo.GetFaceDetectorAsync(Http);
+        await InvokeAsync(() =>
+        {
+            _faces = faces;
+            if (faces == null) { _faceProblem = GpuVideo.FaceStatus; StateHasChanged(); }
+        });
+    }
+
+    string? _faceProblem;
+
+    async Task DetectAsync(Task<SpawnDev.ILGPU.ML.Preprocessing.FaceDetectionResult> detection, int w, int h)
+    {
+        try
+        {
+            var result = await detection;
+            // The detector resumes off the renderer's Dispatcher (it awaits with ConfigureAwait(false)): come back
+            // before touching component state or rendering.
+            await InvokeAsync(() =>
+            {
+                _detecting = false;
+                if (!FaceTracking || _disposed) { _face = null; return; }
+                var f = result.FaceCount > 0 ? result.Faces[0] : null;
+                _face = f == null ? null : new FaceSighting((f.X + f.Width / 2) / w, (f.Y + f.Height / 2) / h, f.Width / w, f.Height / h, f.Confidence);
+                _faceMs = result.InferenceTimeMs;
+                OnFace?.Invoke(_face);
+                StateHasChanged();
+            });
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(() =>
+            {
+                _detecting = false;
+                _faceProblem = ex.Message;
+                JS.Log("MiniRover face detection failed: " + ex);
+                StateHasChanged();
+            });
+        }
+    }
+
+    double _faceMs;
+
+    /// <summary>The face box in CSS pixels over the fitted picture.</summary>
+    string FaceBoxStyle()
+    {
+        if (_face is not FaceSighting f || _boxW <= 0 || _boxH <= 0) return "display:none";
+        double scale = Math.Min(_boxW / (double)_frameW, _boxH / (double)_frameH);
+        double picW = _frameW * scale, picH = _frameH * scale;
+        double offX = (_boxW - picW) / 2, offY = (_boxH - picH) / 2;
+        var c = System.Globalization.CultureInfo.InvariantCulture;
+        return string.Format(c, "left:{0:F0}px;top:{1:F0}px;width:{2:F0}px;height:{3:F0}px",
+            offX + (f.X - f.W / 2) * picW, offY + (f.Y - f.H / 2) * picH, f.W * picW, f.H * picH);
     }
 
     bool EnsureCanvas()

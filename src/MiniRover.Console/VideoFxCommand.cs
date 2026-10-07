@@ -30,7 +30,7 @@ static class VideoFxCommand
         Console.WriteLine($"videofx: {files.Length} frames, denoise {denoise}, sharpen {sharpen}, levels {levels}, white balance {whiteBalance}");
 
         int[]? prevIn = null, prevOut = null;
-        double noiseIn = 0, noiseOut = 0, lumaIn = 0, lumaOut = 0, blockIn = 0, blockOut = 0, chromaIn = 0, chromaOut = 0;
+        double noiseIn = 0, noiseOut = 0, lumaIn = 0, lumaOut = 0, blockIn = 0, blockOut = 0, chromaIn = 0, chromaOut = 0, stripeIn = 0, stripeOut = 0;
         int pairs = 0;
         var sw = new Stopwatch();
         for (int f = 0; f < files.Length; f++)
@@ -57,6 +57,8 @@ static class VideoFxCommand
                 noiseOut += MeanAbsLumaDiff(result, prevOut, w, h);
                 pairs++;
             }
+            stripeIn += Stripes(pixels, w, h);
+            stripeOut += Stripes(result, w, h);
             blockIn += Blockiness(pixels, w, h);
             blockOut += Blockiness(result, w, h);
             lumaIn += MeanLuma(pixels, w, h);
@@ -72,6 +74,7 @@ static class VideoFxCommand
         Console.WriteLine($"  mean luma {lumaIn:F1} -> {lumaOut:F1}; blockiness {blockIn / files.Length:F3} -> {blockOut / files.Length:F3} (1 = no 8x8 grid)");
         Console.WriteLine($"  frame-to-frame change {noiseIn:F2} -> {noiseOut:F2} luma; relative noise {noiseIn / lumaIn * 100:F2}% -> {noiseOut / lumaOut * 100:F2}%");
         Console.WriteLine($"  colour noise (frame-to-frame chroma change) {chromaIn:F2} -> {chromaOut:F2} levels");
+        Console.WriteLine($"  line streaks (row brightness vs its neighbours) {stripeIn / files.Length:F3} -> {stripeOut / files.Length:F3} levels");
         Console.WriteLine($"  CPU accelerator time {sw.ElapsedMilliseconds / (double)files.Length:F1} ms/frame (not the browser's GPU time)");
         Console.WriteLine($"  images: {outDir} (left original, right processed)");
         return 0;
@@ -130,6 +133,22 @@ static class VideoFxCommand
     {
         double r = p & 0xFF, g = (p >> 8) & 0xFF, b = (p >> 16) & 0xFF;
         return (-0.1687 * r - 0.3313 * g + 0.5 * b, 0.5 * r - 0.4187 * g - 0.0813 * b);
+    }
+
+    /// <summary>Horizontal line streaks: mean |row mean luma - average of the rows above and below| (rows 1+).
+    /// Scene content changes row means smoothly; a streaky sensor makes single rows jump.</summary>
+    static double Stripes(int[] a, int w, int h)
+    {
+        var rowMean = new double[h];
+        for (int y = 1; y < h; y++)
+        {
+            long s = 0;
+            for (int x = 0; x < w; x++) s += Luma(a[y * w + x]);
+            rowMean[y] = s / (double)w;
+        }
+        double d = 0;
+        for (int y = 2; y < h - 1; y++) d += Math.Abs(rowMean[y] - (rowMean[y - 1] + rowMean[y + 1]) / 2);
+        return d / (h - 3);
     }
     static void WriteSideBySide(string path, int[] left, int[] right, int w, int h)
     {

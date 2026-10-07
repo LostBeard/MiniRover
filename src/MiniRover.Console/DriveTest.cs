@@ -15,7 +15,7 @@ namespace MiniRover.ConsoleApp;
 /// </summary>
 public static class DriveTest
 {
-    public static async Task<int> RunAsync(string webRoot, int httpPort, int cdpPort, string shotDir, string? rebootPort = null, int lossPermille = 0, string? carHttp = null, bool calibrateLights = false)
+    public static async Task<int> RunAsync(string webRoot, int httpPort, int cdpPort, string shotDir, string? rebootPort = null, int lossPermille = 0, string? carHttp = null, bool calibrateLights = false, bool quiet = false)
     {
         // webRoot: a published wwwroot (served here on localhost) or the URL of a hosted copy (e.g. GitHub Pages).
         bool hosted = webRoot.StartsWith("http://") || webRoot.StartsWith("https://");
@@ -92,6 +92,10 @@ public static class DriveTest
             if (!int.TryParse(rateText.Split('/')[0], out int rate) || rate < 3) throw new Exception($"FAIL telemetry during video is {rateText}, want >= 3/s");
             Console.WriteLine($"PASS telemetry during video: {rateText}");
 
+            // --quiet (night: a child asleep): nothing that turns a motor or sounds the buzzer.
+            if (quiet) Console.WriteLine("SKIP (quiet) touch drag, key W, wheel test, horn, lights");
+            if (!quiet)
+            {
             // Touch: a real touch drag straight up on the drive stick (full deflection), held, then released.
             JsonNode rect = await EvalAsync(cdp, "(()=>{const r=" + Deep("[data-test=stick-drive]") + ".getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()");
             double cx = rect["x"]!.GetValue<double>(), cy = rect["y"]!.GetValue<double>();
@@ -117,12 +121,14 @@ public static class DriveTest
             sw.Restart();
             await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "0", TimeSpan.FromSeconds(3), "the car to report stopped after key up");
             Console.WriteLine($"PASS key up: car reports stopped after {sw.ElapsedMilliseconds} ms");
+            }
 
             if (carHttp != null)
             {
                 // Lights: every press of the button selects the next pattern on the car (read back from /status).
                 using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-                for (int press = 0; press < 7; press++)
+                // --quiet: the 12 LEDs stay dark (TJ: no flashing them at night; the eyes are fine).
+                for (int press = 0; press < (quiet ? 0 : 7); press++)
                 {
                     string before = (await EvalAsync(cdp, Deep("[data-test=btn-lights]") + ".getAttribute('data-mode')")).GetValue<string>();
                     await ClickAsync(cdp, "[data-test=btn-lights]");
@@ -143,7 +149,7 @@ public static class DriveTest
                     }
                     if (got != want) throw new Exception($"FAIL lights: the app selected mode {want}, the car runs {got}");
                 }
-                Console.WriteLine("PASS lights: all 7 patterns selected on the car in turn");
+                Console.WriteLine(quiet ? "SKIP (quiet) lights" : "PASS lights: all 7 patterns selected on the car in turn");
 
                 // Eyes: a mood button and a text message, checked against what the matrix chip really holds
                 // (/status reads its display RAM back), not just what the car was told.
@@ -174,6 +180,40 @@ public static class DriveTest
                 if (!sawText) throw new Exception("FAIL eyes: sent \"HI\", the matrix never showed a frame of it");
                 await cdp.ScreenshotAsync(Path.Combine(shotDir, "drive-3-eyes.png"));
                 await ClickAsync(cdp, "[data-test=eyes-normal]");
+
+                // Face tracking: needs a face in front of the car. Detector loading is checked either way.
+                {
+                    string Face() => EvalAsync(cdp, Deep("[data-test=face-box]") + "?.getAttribute('data-face') ?? ''").Result.GetValue<string>();
+                    (double Pan, double Tilt) Servos()
+                    {
+                        var s = JsonNode.Parse(http.GetStringAsync(carHttp.TrimEnd('/') + "/status").Result)!;
+                        return (s["pan"]?.GetValue<double>() ?? double.NaN, s["tilt"]?.GetValue<double>() ?? double.NaN);
+                    }
+                    await ClickAsync(cdp, "[data-test=btn-face]");
+                    string face = "";
+                    var faceClock = Stopwatch.StartNew();
+                    while (face.Length == 0 && faceClock.ElapsedMilliseconds < 20000) { await Task.Delay(250); face = Face(); }
+                    bool faceProblem = (await EvalAsync(cdp, Deep("[data-test=face-problem]") + " != null")).GetValue<bool>();
+                    if (faceProblem) throw new Exception("FAIL face tracking: the detector did not start");
+                    if (face.Length == 0)
+                    {
+                        Console.WriteLine("SKIP face tracking: the detector runs, but no face was in front of the camera");
+                    }
+                    else
+                    {
+                        string ms = EvalAsync(cdp, Deep("[data-test=face-box]") + ".getAttribute('data-face-ms')").Result.GetValue<string>();
+                        var start = Servos();
+                        double firstX = double.Parse(face.Split(',')[0], System.Globalization.CultureInfo.InvariantCulture);
+                        await cdp.ScreenshotAsync(Path.Combine(shotDir, "drive-5-face.png"));
+                        await Task.Delay(4000);
+                        string lastFace = Face();
+                        var end = Servos();
+                        Console.WriteLine($"PASS face tracking: face at x {firstX:F2} -> {(lastFace.Length > 0 ? lastFace.Split(',')[0] : "lost")}, " +
+                            $"camera pan {start.Pan:F1} -> {end.Pan:F1}, tilt {start.Tilt:F1} -> {end.Tilt:F1}; detection {ms} ms");
+                    }
+                    await ClickAsync(cdp, "[data-test=btn-face]");
+                    await ClickAsync(cdp, "[data-test=btn-center]");
+                }
                 await ClickAsync(cdp, "[data-test=btn-eyes]");
                 Console.WriteLine("PASS eyes: the love button and a text message reached the matrix (read back from the chip)");
             }
@@ -211,11 +251,14 @@ public static class DriveTest
                 await WaitForAttrAsync(cdp, "[data-test=drive-video]", "data-enhanced", "0", TimeSpan.FromSeconds(5), "the plain picture to come back");
                 Console.WriteLine($"PASS picture clean-up on the GPU: {(fx1 - fx0) / 4.0:F1} fps (plain {plainFps}), {fxMs} ms per frame copy+kernels+present, output {fxSize}; off again");
             }
-            sw.Restart();
-            await ClickAsync(cdp, "[data-test=wheel-test-0]");
-            await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "1", TimeSpan.FromSeconds(3), "the wheel test to move a wheel");
-            await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "0", TimeSpan.FromSeconds(3), "the wheel to stop after its test");
-            Console.WriteLine($"PASS wheel test: front-left wheel ran and stopped within {sw.ElapsedMilliseconds} ms");
+            if (!quiet)
+            {
+                sw.Restart();
+                await ClickAsync(cdp, "[data-test=wheel-test-0]");
+                await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "1", TimeSpan.FromSeconds(3), "the wheel test to move a wheel");
+                await WaitForAttrAsync(cdp, "[data-test=hud-moving]", "data-moving", "0", TimeSpan.FromSeconds(3), "the wheel to stop after its test");
+                Console.WriteLine($"PASS wheel test: front-left wheel ran and stopped within {sw.ElapsedMilliseconds} ms");
+            }
             string other = camSize == "8" ? "6" : "8";
             await EvalAsync(cdp, "(()=>{const s=" + Deep("[data-test=set-camera-size]") + ";s.value='" + other + "';s.dispatchEvent(new Event('change',{bubbles:true}));return true;})()");
             await WaitForTextAsync(cdp, "[data-test=settings-reply]", "saved camera.size=" + other, "the car to confirm the new picture size");
@@ -270,7 +313,7 @@ public static class DriveTest
                 catch (Exception ex) { Console.WriteLine("  car status not readable: " + ex.Message); }
             }
 
-            await ClickAsync(cdp, "[data-test=btn-horn]");
+            if (!quiet) await ClickAsync(cdp, "[data-test=btn-horn]");
             await ClickAsync(cdp, "[data-test=drive-back]");
             await WaitForAsync(cdp, "[data-test=garage-drive]", TimeSpan.FromSeconds(10), "the garage after Back");
             Console.WriteLine("PASS back to the garage (link closed)");
