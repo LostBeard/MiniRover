@@ -150,8 +150,8 @@ Measured 2026-10-06: the stock nanoFramework image cannot be deployed to over th
   - Internal RAM: the WebRTC pump's 16 KB stack left 4 KB internal free with BLE on (ICE 20 s late, DTLS failed); the stack is in PSRAM now, 20 KB free during a session.
   - The app lets go of BLE as soon as the car took the answer: with BLE connected through the DTLS handshake only 1 of 3 sessions came up; after, 5 of 5.
   - Telemetry WiFi signal in play mode = the strongest device on the car's network (was 0).
-- [ ] Play mode speed: video 10.7 fps vs 14.7 at home, round trip 123 vs 44 ms. Pausing BLE advertising during a session made it worse (measured, reverted). Next: measure without BLE at all, and AP+STA vs AP-only.
-- [ ] Internet path connect time varied 8-42 s today (6.6 s yesterday) with BOTH today's and the old firmware; ICE itself takes 1.8-2.9 s, so the time is in tracker signaling / session start. Investigate (hub tracker, announce timing).
+- [ ] Speed, re-measure on a quiet PC: every fps / round-trip / connect-time number from 2026-10-07 was taken while a peer's heavy GPU job (Gaussian splat training) ran on this PC, so none of them is a valid comparison: play mode 10.7 fps / 123 ms, home 11.7 fps / 111 ms (yesterday 14.7 fps / 44 ms), and the "pausing BLE advertising made it worse" result. Then A/B the WebRTC pump stack in PSRAM vs internal RAM (home mode, where both fit).
+- [ ] Internet path connect time varied 8-42 s on 2026-10-07 (6.6 s on 10-06), with both firmware versions; ICE itself took 1.8-2.9 s, so the time is in tracker signaling / session start. Same caveat: measured under a peer's heavy GPU load; re-measure quietly before investigating.
 - [x] GitHub Pages deployment of the browser app (https://lostbeard.github.io/MiniRover/, verified driving the car)
 - [ ] Firmware images as GitHub Release assets + flashing guide
 
